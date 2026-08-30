@@ -20,5 +20,10 @@ def weak_digest(data):
     return hashlib.md5(data).hexdigest()  # weak-hash
 
 
+def weak_digest_for_cache_key(data):
+    # non-security use, reviewed and accepted
+    return hashlib.md5(data).hexdigest()  # minisast: ignore[weak-hash]
+
+
 def lookup_user(cursor, username):
     cursor.execute(f"SELECT * FROM users WHERE name = '{username}'")  # sql-injection

@@ -33,10 +33,31 @@ Sample output against the intentionally-flawed fixture in `samples/`:
 [HIGH] samples/vulnerable.py:12  shell-injection: subprocess.call(shell=True) risks command injection
 [HIGH] samples/vulnerable.py:16  eval-exec: use of eval() can execute arbitrary code
 [LOW ] samples/vulnerable.py:20  weak-hash: hashlib.md5() is not collision-resistant; avoid for security use
-[HIGH] samples/vulnerable.py:24  sql-injection: execute() built from string interpolation; use parameterized queries
+[HIGH] samples/vulnerable.py:29  sql-injection: execute() built from string interpolation; use parameterized queries
 
 6 finding(s), 5 high severity
 ```
+
+Note the `weak_digest_for_cache_key` function at line 25 also calls
+`hashlib.md5()` but is suppressed (see below) and correctly does not
+appear in the findings.
+
+## Suppressing findings
+
+A trailing comment silences findings on that line, for cases a human has
+reviewed and accepted:
+
+```python
+hashlib.md5(data).hexdigest()  # minisast: ignore[weak-hash]
+eval(trusted_expr)             # minisast: ignore
+```
+
+- `# minisast: ignore[rule-id, other-rule]` suppresses only the listed rules.
+- `# minisast: ignore` (no brackets) suppresses every rule on that line.
+
+Suppression is per-line and intentionally has no wildcard or file-level
+form — each one should be a deliberate, visible decision next to the code
+it applies to.
 
 ## Current rules
 
@@ -52,7 +73,7 @@ Sample output against the intentionally-flawed fixture in `samples/`:
 
 This is the first slice. Future increments:
 
-- Inline suppression comments (`# minisast: ignore[rule-id]`)
+- ~~Inline suppression comments (`# minisast: ignore[rule-id]`)~~ done
 - A config file for severity overrides and path excludes
 - JSON/SARIF output mode for CI integration
 - More rules: insecure deserialization (`pickle.loads`), YAML `load` without

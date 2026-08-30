@@ -17,6 +17,7 @@ SECRET_ASSIGN_RE = re.compile(
     r"""^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*["']([^"']+)["']\s*(#.*)?$"""
 )
 PLACEHOLDER_RE = re.compile(r"^(changeme|xxx+|todo|<.*>|\$\{.*\}|)$", re.I)
+SUPPRESS_RE = re.compile(r"#\s*minisast:\s*ignore(?:\[([\w,\s-]+)\])?", re.I)
 
 WEAK_HASHES = {"md5", "sha1"}
 SHELL_FUNCS = {"call", "run", "Popen", "check_call", "check_output"}
@@ -80,9 +81,29 @@ class AstChecks(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _parse_suppressions(lines: list[str]) -> dict[int, set[str] | None]:
+    """Map line number -> set of suppressed rule ids, or None to suppress all rules on that line."""
+    suppressions: dict[int, set[str] | None] = {}
+    for i, line in enumerate(lines, start=1):
+        m = SUPPRESS_RE.search(line)
+        if not m:
+            continue
+        rules = m.group(1)
+        suppressions[i] = {r.strip() for r in rules.split(",")} if rules else None
+    return suppressions
+
+
+def _is_suppressed(finding: Finding, suppressions: dict[int, set[str] | None]) -> bool:
+    if finding.line not in suppressions:
+        return False
+    rules = suppressions[finding.line]
+    return rules is None or finding.rule in rules
+
+
 def scan_file(path: Path) -> list[Finding]:
     text = path.read_text(errors="replace")
     lines = text.splitlines()
+    suppressions = _parse_suppressions(lines)
     findings = scan_source_lines(str(path), lines)
     try:
         tree = ast.parse(text, filename=str(path))
@@ -90,7 +111,8 @@ def scan_file(path: Path) -> list[Finding]:
         return findings + [Finding(str(path), e.lineno or 0, "parse-error", "INFO", str(e))]
     checker = AstChecks(str(path))
     checker.visit(tree)
-    return findings + checker.findings
+    all_findings = findings + checker.findings
+    return [f for f in all_findings if not _is_suppressed(f, suppressions)]
 
 
 def scan_path(target: Path) -> list[Finding]:

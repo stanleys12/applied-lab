@@ -2,7 +2,7 @@
   "active": {
     "dir": "projects/2026-08-29-mini-sast-scanner",
     "theme": "security",
-    "increments_done": 1,
+    "increments_done": 2,
     "increments_target": 5
   },
   "theme_rotation": ["security", "ai-ml", "fintech"],
