@@ -22,6 +22,8 @@ SUPPRESS_RE = re.compile(r"#\s*minisast:\s*ignore(?:\[([\w,\s-]+)\])?", re.I)
 WEAK_HASHES = {"md5", "sha1"}
 SHELL_FUNCS = {"call", "run", "Popen", "check_call", "check_output"}
 SQL_METHODS = {"execute", "executemany"}
+UNSAFE_DESERIALIZE = {"pickle": {"load", "loads"}}
+HTTP_FUNCS = {"get", "post", "put", "delete", "patch", "request"}
 
 
 @dataclass
@@ -77,6 +79,26 @@ class AstChecks(ast.NodeVisitor):
         if name in SQL_METHODS and node.args and _is_sql_unsafe_arg(node.args[0]):
             self.findings.append(Finding(self.path, node.lineno, "sql-injection",
                 "HIGH", f"{name}() built from string interpolation; use parameterized queries"))
+
+        if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+            module = func.value.id
+            if func.attr in UNSAFE_DESERIALIZE.get(module, set()):
+                self.findings.append(Finding(self.path, node.lineno, "insecure-deserialization",
+                    "HIGH", f"{module}.{func.attr}() can execute arbitrary code on untrusted input"))
+
+            if module == "yaml" and func.attr == "load":
+                loader_kw = next((kw for kw in node.keywords if kw.arg == "Loader"), None)
+                is_safe = (loader_kw is not None and isinstance(loader_kw.value, ast.Attribute)
+                    and loader_kw.value.attr == "SafeLoader")
+                if not is_safe:
+                    self.findings.append(Finding(self.path, node.lineno, "unsafe-yaml-load",
+                        "HIGH", "yaml.load() without Loader=SafeLoader can execute arbitrary code"))
+
+        if name in HTTP_FUNCS:
+            for kw in node.keywords:
+                if kw.arg == "verify" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
+                    self.findings.append(Finding(self.path, node.lineno, "disabled-tls-verify",
+                        "HIGH", f"{name}(verify=False) disables TLS certificate verification"))
 
         self.generic_visit(node)
 

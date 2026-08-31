@@ -2,7 +2,11 @@
 # so the scanner has something to find. Nothing here is a real credential
 # and none of these code paths are ever executed.
 import hashlib
+import pickle
 import subprocess
+
+import requests
+import yaml
 
 api_key = "sk-fake-1234567890abcdef"  # hardcoded-secret
 db_password = "hunter2"               # hardcoded-secret
@@ -27,3 +31,19 @@ def weak_digest_for_cache_key(data):
 
 def lookup_user(cursor, username):
     cursor.execute(f"SELECT * FROM users WHERE name = '{username}'")  # sql-injection
+
+
+def load_session(blob):
+    return pickle.loads(blob)  # insecure-deserialization
+
+
+def load_config(stream):
+    return yaml.load(stream)  # unsafe-yaml-load
+
+
+def load_config_safely(stream):
+    return yaml.load(stream, Loader=yaml.SafeLoader)  # not flagged
+
+
+def fetch(url):
+    return requests.get(url, verify=False)  # disabled-tls-verify

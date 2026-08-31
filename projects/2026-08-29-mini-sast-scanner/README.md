@@ -2,7 +2,8 @@
 
 A small static-analysis tool that scans Python source for common security
 smells: hardcoded credentials, `eval`/`exec`, `subprocess(shell=True)`,
-weak hashes, and SQL built via string interpolation. Educational/defensive
+weak hashes, SQL built via string interpolation, insecure deserialization,
+unsafe YAML loading, and disabled TLS verification. Educational/defensive
 only — it finds patterns worth a human's attention; it does not exploit
 anything.
 
@@ -28,19 +29,23 @@ CI), `0` otherwise.
 Sample output against the intentionally-flawed fixture in `samples/`:
 
 ```
-[HIGH] samples/vulnerable.py:7  hardcoded-secret: possible hardcoded credential in 'api_key'
-[HIGH] samples/vulnerable.py:8  hardcoded-secret: possible hardcoded credential in 'db_password'
-[HIGH] samples/vulnerable.py:12  shell-injection: subprocess.call(shell=True) risks command injection
-[HIGH] samples/vulnerable.py:16  eval-exec: use of eval() can execute arbitrary code
-[LOW ] samples/vulnerable.py:20  weak-hash: hashlib.md5() is not collision-resistant; avoid for security use
-[HIGH] samples/vulnerable.py:29  sql-injection: execute() built from string interpolation; use parameterized queries
+[HIGH] samples/vulnerable.py:11  hardcoded-secret: possible hardcoded credential in 'api_key'
+[HIGH] samples/vulnerable.py:12  hardcoded-secret: possible hardcoded credential in 'db_password'
+[HIGH] samples/vulnerable.py:16  shell-injection: subprocess.call(shell=True) risks command injection
+[HIGH] samples/vulnerable.py:20  eval-exec: use of eval() can execute arbitrary code
+[LOW ] samples/vulnerable.py:24  weak-hash: hashlib.md5() is not collision-resistant; avoid for security use
+[HIGH] samples/vulnerable.py:33  sql-injection: execute() built from string interpolation; use parameterized queries
+[HIGH] samples/vulnerable.py:37  insecure-deserialization: pickle.loads() can execute arbitrary code on untrusted input
+[HIGH] samples/vulnerable.py:41  unsafe-yaml-load: yaml.load() without Loader=SafeLoader can execute arbitrary code
+[HIGH] samples/vulnerable.py:49  disabled-tls-verify: get(verify=False) disables TLS certificate verification
 
-6 finding(s), 5 high severity
+9 finding(s), 8 high severity
 ```
 
-Note the `weak_digest_for_cache_key` function at line 25 also calls
-`hashlib.md5()` but is suppressed (see below) and correctly does not
-appear in the findings.
+Note the `weak_digest_for_cache_key` function also calls `hashlib.md5()`
+but is suppressed (see below) and correctly does not appear in the
+findings, and `load_config_safely` uses `yaml.load(..., Loader=SafeLoader)`
+which is correctly treated as safe.
 
 ## Suppressing findings
 
@@ -68,16 +73,21 @@ it applies to.
 | `shell-injection` | HIGH | `subprocess.*(..., shell=True)` |
 | `weak-hash` | LOW | `hashlib.md5()` / `hashlib.sha1()` |
 | `sql-injection` | HIGH | `.execute()`/`.executemany()` called with an f-string or `+`/`%`-built string instead of parameters |
+| `insecure-deserialization` | HIGH | `pickle.load()` / `pickle.loads()` |
+| `unsafe-yaml-load` | HIGH | `yaml.load()` without `Loader=yaml.SafeLoader` |
+| `disabled-tls-verify` | HIGH | HTTP call (`get`/`post`/`put`/`delete`/`patch`/`request`) with `verify=False` |
 
 ## Vision / growth plan
 
 This is the first slice. Future increments:
 
 - ~~Inline suppression comments (`# minisast: ignore[rule-id]`)~~ done
+- ~~More rules: insecure deserialization (`pickle.loads`), unsafe YAML~~
+  ~~`load`, disabled TLS verification (`verify=False`)~~ done
 - A config file for severity overrides and path excludes
 - JSON/SARIF output mode for CI integration
-- More rules: insecure deserialization (`pickle.loads`), YAML `load` without
-  `SafeLoader`, weak TLS verification (`verify=False`), regex DoS patterns
+- More rules: regex DoS patterns, insecure random for tokens (`random`
+  instead of `secrets`)
 - A small unit test suite with fixtures per rule
 - Optional JS/TS support via a second, lighter rule set
 
