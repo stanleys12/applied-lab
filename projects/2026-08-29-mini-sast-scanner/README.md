@@ -26,6 +26,12 @@ python3 scanner.py .
 Exit code is `1` if any HIGH-severity finding is present (so it can gate
 CI), `0` otherwise.
 
+Run the test suite (one fixture snippet per rule, plus suppression checks):
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
 Sample output against the intentionally-flawed fixture in `samples/`:
 
 ```
@@ -90,7 +96,7 @@ This is the first slice. Future increments:
 - JSON/SARIF output mode for CI integration
 - More rules: regex DoS patterns
 - ~~Insecure random for tokens (`random` instead of `secrets`)~~ done
-- A small unit test suite with fixtures per rule
+- ~~A small unit test suite with fixtures per rule~~ done
 - Optional JS/TS support via a second, lighter rule set
 
 ## Fixture
