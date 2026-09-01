@@ -29,17 +29,18 @@ CI), `0` otherwise.
 Sample output against the intentionally-flawed fixture in `samples/`:
 
 ```
-[HIGH] samples/vulnerable.py:11  hardcoded-secret: possible hardcoded credential in 'api_key'
-[HIGH] samples/vulnerable.py:12  hardcoded-secret: possible hardcoded credential in 'db_password'
-[HIGH] samples/vulnerable.py:16  shell-injection: subprocess.call(shell=True) risks command injection
-[HIGH] samples/vulnerable.py:20  eval-exec: use of eval() can execute arbitrary code
-[LOW ] samples/vulnerable.py:24  weak-hash: hashlib.md5() is not collision-resistant; avoid for security use
-[HIGH] samples/vulnerable.py:33  sql-injection: execute() built from string interpolation; use parameterized queries
-[HIGH] samples/vulnerable.py:37  insecure-deserialization: pickle.loads() can execute arbitrary code on untrusted input
-[HIGH] samples/vulnerable.py:41  unsafe-yaml-load: yaml.load() without Loader=SafeLoader can execute arbitrary code
-[HIGH] samples/vulnerable.py:49  disabled-tls-verify: get(verify=False) disables TLS certificate verification
+[HIGH] samples/vulnerable.py:12  hardcoded-secret: possible hardcoded credential in 'api_key'
+[HIGH] samples/vulnerable.py:13  hardcoded-secret: possible hardcoded credential in 'db_password'
+[HIGH] samples/vulnerable.py:17  shell-injection: subprocess.call(shell=True) risks command injection
+[HIGH] samples/vulnerable.py:21  eval-exec: use of eval() can execute arbitrary code
+[LOW ] samples/vulnerable.py:25  weak-hash: hashlib.md5() is not collision-resistant; avoid for security use
+[HIGH] samples/vulnerable.py:34  sql-injection: execute() built from string interpolation; use parameterized queries
+[HIGH] samples/vulnerable.py:38  insecure-deserialization: pickle.loads() can execute arbitrary code on untrusted input
+[HIGH] samples/vulnerable.py:42  unsafe-yaml-load: yaml.load() without Loader=SafeLoader can execute arbitrary code
+[HIGH] samples/vulnerable.py:50  disabled-tls-verify: get(verify=False) disables TLS certificate verification
+[HIGH] samples/vulnerable.py:54  insecure-random: random.choice() is not cryptographically secure; use the 'secrets' module for 'session_token'
 
-9 finding(s), 8 high severity
+10 finding(s), 9 high severity
 ```
 
 Note the `weak_digest_for_cache_key` function also calls `hashlib.md5()`
@@ -76,6 +77,7 @@ it applies to.
 | `insecure-deserialization` | HIGH | `pickle.load()` / `pickle.loads()` |
 | `unsafe-yaml-load` | HIGH | `yaml.load()` without `Loader=yaml.SafeLoader` |
 | `disabled-tls-verify` | HIGH | HTTP call (`get`/`post`/`put`/`delete`/`patch`/`request`) with `verify=False` |
+| `insecure-random` | HIGH | `random.*()` (e.g. `choice`, `randint`) assigned to a token/secret/password-named variable instead of the `secrets` module |
 
 ## Vision / growth plan
 
@@ -86,8 +88,8 @@ This is the first slice. Future increments:
   ~~`load`, disabled TLS verification (`verify=False`)~~ done
 - A config file for severity overrides and path excludes
 - JSON/SARIF output mode for CI integration
-- More rules: regex DoS patterns, insecure random for tokens (`random`
-  instead of `secrets`)
+- More rules: regex DoS patterns
+- ~~Insecure random for tokens (`random` instead of `secrets`)~~ done
 - A small unit test suite with fixtures per rule
 - Optional JS/TS support via a second, lighter rule set
 

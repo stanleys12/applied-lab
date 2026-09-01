@@ -24,6 +24,7 @@ SHELL_FUNCS = {"call", "run", "Popen", "check_call", "check_output"}
 SQL_METHODS = {"execute", "executemany"}
 UNSAFE_DESERIALIZE = {"pickle": {"load", "loads"}}
 HTTP_FUNCS = {"get", "post", "put", "delete", "patch", "request"}
+INSECURE_RANDOM_FUNCS = {"random", "randint", "randrange", "choice", "uniform", "getrandbits", "sample"}
 
 
 @dataclass
@@ -100,6 +101,19 @@ class AstChecks(ast.NodeVisitor):
                     self.findings.append(Finding(self.path, node.lineno, "disabled-tls-verify",
                         "HIGH", f"{name}(verify=False) disables TLS certificate verification"))
 
+        self.generic_visit(node)
+
+    def visit_Assign(self, node: ast.Assign):
+        value = node.value
+        if (isinstance(value, ast.Call) and isinstance(value.func, ast.Attribute)
+                and isinstance(value.func.value, ast.Name) and value.func.value.id == "random"
+                and value.func.attr in INSECURE_RANDOM_FUNCS):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and SECRET_NAME_RE.search(target.id):
+                    self.findings.append(Finding(self.path, node.lineno, "insecure-random",
+                        "HIGH",
+                        f"random.{value.func.attr}() is not cryptographically secure; "
+                        f"use the 'secrets' module for '{target.id}'"))
         self.generic_visit(node)
 
 

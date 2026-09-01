@@ -3,6 +3,7 @@
 # and none of these code paths are ever executed.
 import hashlib
 import pickle
+import random
 import subprocess
 
 import requests
@@ -47,3 +48,8 @@ def load_config_safely(stream):
 
 def fetch(url):
     return requests.get(url, verify=False)  # disabled-tls-verify
+
+
+def new_session_token():
+    session_token = random.choice("abcdefghijklmnopqrstuvwxyz0123456789")  # insecure-random
+    return session_token
