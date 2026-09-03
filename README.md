@@ -18,4 +18,5 @@ Everything runs on `python3` (stdlib) or `node`, no installs.
 
 | Started | Theme | Project | Status | Increments |
 |---------|-------|---------|--------|------------|
-| 2026-08-29 | security | [mini-sast-scanner](projects/2026-08-29-mini-sast-scanner) | wip | 5/5 |
+| 2026-08-29 | security | [mini-sast-scanner](projects/2026-08-29-mini-sast-scanner) | done | 5/5 |
+| 2026-09-03 | ai-ml | [tiny-autograd](projects/2026-09-03-tiny-autograd) | wip | 1/5 |

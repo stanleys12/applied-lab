@@ -1,11 +1,11 @@
 {
   "active": {
-    "dir": "projects/2026-08-29-mini-sast-scanner",
-    "theme": "security",
-    "increments_done": 5,
+    "dir": "projects/2026-09-03-tiny-autograd",
+    "theme": "ai-ml",
+    "increments_done": 1,
     "increments_target": 5
   },
   "theme_rotation": ["security", "ai-ml", "fintech"],
-  "next_theme_index": 1,
-  "completed_count": 0
+  "next_theme_index": 2,
+  "completed_count": 1
 }
