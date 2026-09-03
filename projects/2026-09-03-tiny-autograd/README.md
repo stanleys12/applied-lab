@@ -30,6 +30,27 @@ df/db = 0.632473 (expected 0.632473)
 gradients match closed-form derivatives
 ```
 
+## Neural net demo
+
+```bash
+python3 nn.py
+```
+
+`nn.py` builds `Neuron` / `Layer` / `MLP` classes on top of `Value` and
+trains a 2-16-16-1 MLP (tanh hidden units) on a toy 2D dataset — four
+clusters arranged so the two classes are not linearly separable, forcing
+the hidden layers to actually do something. Training uses hinge loss
+plus a small L2 term, plain SGD with a linearly decaying learning rate,
+and manual `backward()` / gradient-descent steps (no optimizer class
+yet):
+
+```
+epoch   0  loss 1.3639  accuracy 50.00%
+epoch  50  loss 0.0117  accuracy 100.00%
+...
+final accuracy: 80/80 = 100.00%
+```
+
 ## Current ops
 
 `+`, `-`, `*`, `/`, `**` (int/float powers), `tanh`, `relu`, plus the
@@ -38,12 +59,12 @@ with plain numbers on either side of an operator.
 
 ## Vision / growth plan
 
-This is the first slice — a bare autograd core. Future increments:
+- ~~`Neuron` / `Layer` / `MLP` classes built on top of `Value`, with a
+  manual SGD training loop on a toy classification dataset~~ done
 
-- `Neuron` / `Layer` / `MLP` classes built on top of `Value`, with a
-  manual SGD training loop on a toy classification dataset
+Future increments:
+
 - More ops: `exp`, `log`, `sigmoid`
 - A gradient-checking test suite (finite-difference vs. analytic)
 - An ASCII loss-curve printout during training
-- L2 regularization / weight decay
-- A second optimizer (SGD with momentum) for comparison
+- A pluggable optimizer (SGD with momentum) instead of the raw update loop
