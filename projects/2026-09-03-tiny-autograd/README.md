@@ -51,6 +51,19 @@ epoch  50  loss 0.0117  accuracy 100.00%
 final accuracy: 80/80 = 100.00%
 ```
 
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+A gradient-checking suite: for each op (and a few composite/nested
+expressions), it compares the analytic gradient from `.backward()`
+against a central-difference numerical estimate. This catches a wrong
+backward rule in a way a normal "does `.data` look right" test can't —
+e.g. it verifies gradients correctly *accumulate* rather than overwrite
+when a value is reused more than once in an expression (`x * x + x`).
+
 ## Current ops
 
 `+`, `-`, `*`, `/`, `**` (int/float powers), `tanh`, `relu`, plus the
@@ -61,10 +74,10 @@ with plain numbers on either side of an operator.
 
 - ~~`Neuron` / `Layer` / `MLP` classes built on top of `Value`, with a
   manual SGD training loop on a toy classification dataset~~ done
+- ~~A gradient-checking test suite (finite-difference vs. analytic)~~ done
 
 Future increments:
 
 - More ops: `exp`, `log`, `sigmoid`
-- A gradient-checking test suite (finite-difference vs. analytic)
 - An ASCII loss-curve printout during training
 - A pluggable optimizer (SGD with momentum) instead of the raw update loop
