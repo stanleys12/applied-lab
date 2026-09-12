@@ -20,4 +20,4 @@ Everything runs on `python3` (stdlib) or `node`, no installs.
 |---------|-------|---------|--------|------------|
 | 2026-08-29 | security | [mini-sast-scanner](projects/2026-08-29-mini-sast-scanner) | done | 5/5 |
 | 2026-09-03 | ai-ml | [tiny-autograd](projects/2026-09-03-tiny-autograd) | done | 5/5 |
-| 2026-09-12 | fintech | [options-pricing-lab](projects/2026-09-12-options-pricing-lab) | wip | 1/5 |
+| 2026-09-12 | fintech | [options-pricing-lab](projects/2026-09-12-options-pricing-lab) | wip | 2/5 |

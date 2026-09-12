@@ -48,12 +48,31 @@ all sanity checks passed
 - `greeks(...)` — delta, gamma, vega, theta, rho, derived analytically
   from the same `d1`/`d2` terms as the price
 
+## Tests
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Three kinds of checks, none of which require trusting the formula
+itself as ground truth:
+- **Put-call parity** across a grid of `S`/`K`/`T`/`r`/`sigma` values —
+  `C - P == S - K*e^(-rT)` must hold regardless of whether the prices
+  are "correct"
+- **A known textbook reference price** (Hull) to catch a formula that's
+  internally consistent but simply wrong
+- **Finite-difference Greeks** — each analytic Greek is just a partial
+  derivative of `price()`, so central-difference on `price()` itself
+  should match `greeks()` without a separately hand-derived formula to
+  compare against
+
 ## Vision / growth plan
+
+- ~~A unit test suite (put-call parity, known reference prices, Greek
+  finite-difference checks against the analytic formulas)~~ done
 
 Future increments:
 
-- A unit test suite (put-call parity, known reference prices, Greek
-  finite-difference checks against the analytic formulas)
 - Implied volatility solver (Newton-Raphson / bisection) that inverts
   `price()` given a market price
 - A binomial (CRR) tree pricer for American options, compared against
