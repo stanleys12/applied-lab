@@ -1,6 +1,11 @@
 {
-  "active": null,
+  "active": {
+    "dir": "projects/2026-09-12-options-pricing-lab",
+    "theme": "fintech",
+    "increments_done": 1,
+    "increments_target": 5
+  },
   "theme_rotation": ["security", "ai-ml", "fintech"],
-  "next_theme_index": 2,
+  "next_theme_index": 0,
   "completed_count": 2
 }
