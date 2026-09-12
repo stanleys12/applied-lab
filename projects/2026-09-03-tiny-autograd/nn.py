@@ -70,12 +70,34 @@ def _make_dataset(n_per_class=20, seed=42):
     return xs, ys
 
 
+def _ascii_loss_curve(losses, width=60, height=10):
+    """Render a loss history as an ASCII sparkline chart, scaled to fit
+    `width` columns by bucket-averaging and `height` rows by min/max."""
+    n = len(losses)
+    bucket_size = max(1, n // width)
+    buckets = [
+        sum(losses[i:i + bucket_size]) / len(losses[i:i + bucket_size])
+        for i in range(0, n, bucket_size)
+    ]
+    lo, hi = min(buckets), max(buckets)
+    spread = hi - lo or 1.0
+
+    rows = []
+    for row in range(height, 0, -1):
+        threshold = lo + spread * (row - 0.5) / height
+        rows.append("".join("*" if b >= threshold else " " for b in buckets))
+    chart = "\n".join(f"{lo + spread * (height - i) / height:8.4f} |{r}" for i, r in enumerate(rows))
+    chart += "\n" + " " * 9 + "-" * len(buckets)
+    return chart
+
+
 def _train():
     random.seed(1)
     xs, ys = _make_dataset()
     model = MLP(2, [16, 16, 1])
 
     epochs = 300
+    loss_history = []
     for epoch in range(epochs):
         lr = 0.1 * (1 - epoch / epochs) + 0.01  # linear decay 0.11 -> 0.01
 
@@ -85,6 +107,7 @@ def _train():
         data_loss = sum(losses, Value(0.0)) / len(losses)
         reg_loss = sum((p * p for p in model.parameters()), Value(0.0)) * 1e-4
         loss = data_loss + reg_loss
+        loss_history.append(loss.data)
 
         for p in model.parameters():
             p.grad = 0.0
@@ -103,6 +126,9 @@ def _train():
     correct = sum((pi.data > 0) == (yi > 0) for pi, yi in zip(preds, ys))
     print(f"final accuracy: {correct}/{len(ys)} = {correct / len(ys):.2%}")
     assert correct / len(ys) >= 0.9, "MLP failed to fit the toy dataset"
+
+    print("\nloss curve:")
+    print(_ascii_loss_curve(loss_history))
 
 
 if __name__ == "__main__":

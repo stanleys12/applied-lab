@@ -42,13 +42,22 @@ clusters arranged so the two classes are not linearly separable, forcing
 the hidden layers to actually do something. Training uses hinge loss
 plus a small L2 term, plain SGD with a linearly decaying learning rate,
 and manual `backward()` / gradient-descent steps (no optimizer class
-yet):
+yet). It finishes by printing an ASCII sparkline of the loss history
+(bucket-averaged to fit the terminal width) so you can see the descent
+shape without plotting libraries:
 
 ```
 epoch   0  loss 1.3639  accuracy 50.00%
 epoch  50  loss 0.0117  accuracy 100.00%
 ...
 final accuracy: 80/80 = 100.00%
+
+loss curve:
+  0.8464 |*
+  0.7629 |*
+  ...
+  0.0946 |**
+         ------------------------------------------------------------
 ```
 
 ## Tests
@@ -79,8 +88,8 @@ operator.
 - ~~More ops: `exp`, `log`, `sigmoid`~~ done — gradient-checked in
   `tests/test_autograd.py`, including a cross-check that `sigmoid`
   agrees with the `tanh`-based identity `sigmoid(x) = (tanh(x/2)+1)/2`
+- ~~An ASCII loss-curve printout during training~~ done
 
-Future increments:
+Possible future directions (not currently planned):
 
-- An ASCII loss-curve printout during training
 - A pluggable optimizer (SGD with momentum) instead of the raw update loop
