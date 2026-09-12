@@ -71,6 +71,36 @@ class Value:
         out._backward = _backward
         return out
 
+    def exp(self):
+        e = math.exp(self.data)
+        out = Value(e, (self,), "exp")
+
+        def _backward():
+            self.grad += out.data * out.grad
+
+        out._backward = _backward
+        return out
+
+    def log(self):
+        assert self.data > 0, "log() requires a positive value"
+        out = Value(math.log(self.data), (self,), "log")
+
+        def _backward():
+            self.grad += (1.0 / self.data) * out.grad
+
+        out._backward = _backward
+        return out
+
+    def sigmoid(self):
+        s = 1.0 / (1.0 + math.exp(-self.data))
+        out = Value(s, (self,), "sigmoid")
+
+        def _backward():
+            self.grad += s * (1 - s) * out.grad
+
+        out._backward = _backward
+        return out
+
     def backward(self):
         topo = []
         visited = set()

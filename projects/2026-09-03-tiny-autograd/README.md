@@ -66,18 +66,21 @@ when a value is reused more than once in an expression (`x * x + x`).
 
 ## Current ops
 
-`+`, `-`, `*`, `/`, `**` (int/float powers), `tanh`, `relu`, plus the
-reflected forms (`__radd__`, `__rmul__`, etc.) so `Value`s mix freely
-with plain numbers on either side of an operator.
+`+`, `-`, `*`, `/`, `**` (int/float powers), `tanh`, `relu`, `exp`,
+`log`, `sigmoid`, plus the reflected forms (`__radd__`, `__rmul__`,
+etc.) so `Value`s mix freely with plain numbers on either side of an
+operator.
 
 ## Vision / growth plan
 
 - ~~`Neuron` / `Layer` / `MLP` classes built on top of `Value`, with a
   manual SGD training loop on a toy classification dataset~~ done
 - ~~A gradient-checking test suite (finite-difference vs. analytic)~~ done
+- ~~More ops: `exp`, `log`, `sigmoid`~~ done — gradient-checked in
+  `tests/test_autograd.py`, including a cross-check that `sigmoid`
+  agrees with the `tanh`-based identity `sigmoid(x) = (tanh(x/2)+1)/2`
 
 Future increments:
 
-- More ops: `exp`, `log`, `sigmoid`
 - An ASCII loss-curve printout during training
 - A pluggable optimizer (SGD with momentum) instead of the raw update loop

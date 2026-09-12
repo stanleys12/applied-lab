@@ -84,6 +84,30 @@ class TestBasicOps(GradCheckMixin, unittest.TestCase):
         self.assert_matches_numeric(lambda a: 2.0 * a, [1.1])
         self.assert_matches_numeric(lambda a: 5.0 / a, [1.1])
 
+    def test_exp(self):
+        self.assert_matches_numeric(lambda a: a.exp(), [0.7])
+
+    def test_log(self):
+        self.assert_matches_numeric(lambda a: a.log(), [2.3])
+
+    def test_sigmoid(self):
+        self.assert_matches_numeric(lambda a: a.sigmoid(), [-1.4])
+
+    def test_sigmoid_matches_tanh_identity(self):
+        # sigmoid(x) == (tanh(x/2) + 1) / 2 -- cross-check the new op
+        # against the existing, already-tested tanh op rather than only
+        # against a hand-derived closed form.
+        x = Value(0.6)
+        s = x.sigmoid()
+        s.backward()
+
+        y = Value(0.6)
+        t = (y * 0.5).tanh() * 0.5 + 0.5
+        t.backward()
+
+        self.assertAlmostEqual(s.data, t.data, delta=1e-9)
+        self.assertAlmostEqual(x.grad, y.grad, delta=1e-9)
+
 
 class TestCompositeExpressions(GradCheckMixin, unittest.TestCase):
     def test_shared_subexpression(self):
