@@ -47,6 +47,10 @@ all sanity checks passed
 - `price(S, K, T, r, sigma, option_type)` — European call/put fair value
 - `greeks(...)` — delta, gamma, vega, theta, rho, derived analytically
   from the same `d1`/`d2` terms as the price
+- `implied_vol(market_price, S, K, T, r, option_type)` — inverts
+  `price()` for sigma given an observed market price, via
+  Newton-Raphson (using `greeks()`'s vega) with a bisection fallback
+  for when vega is too small to trust
 
 ## Tests
 
@@ -70,11 +74,11 @@ itself as ground truth:
 
 - ~~A unit test suite (put-call parity, known reference prices, Greek
   finite-difference checks against the analytic formulas)~~ done
+- ~~Implied volatility solver (Newton-Raphson / bisection) that inverts
+  `price()` given a market price~~ done
 
 Future increments:
 
-- Implied volatility solver (Newton-Raphson / bisection) that inverts
-  `price()` given a market price
 - A binomial (CRR) tree pricer for American options, compared against
   Black-Scholes on the European case as a correctness check
 - A simple Monte Carlo pricer (geometric Brownian motion paths) that

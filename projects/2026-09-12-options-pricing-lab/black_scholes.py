@@ -75,6 +75,48 @@ def greeks(S, K, T, r, sigma, option_type=CALL):
     return {"delta": delta, "gamma": gamma, "vega": vega, "theta": theta, "rho": rho}
 
 
+def implied_vol(market_price, S, K, T, r, option_type=CALL, tol=1e-8, max_iter=100):
+    """Invert `price()` for sigma given an observed market price.
+
+    Uses Newton-Raphson (fast, converges quadratically) seeded from a
+    starting guess, falling back to bisection on a bracketing interval
+    if a Newton step ever leaves the domain or fails to converge --
+    vega can be tiny (deep ITM/OTM, near expiry) and blow up the
+    Newton step, so bisection is the robustness backstop.
+    """
+    lo, hi = 1e-6, 5.0
+    price_lo = price(S, K, T, r, lo, option_type)
+    price_hi = price(S, K, T, r, hi, option_type)
+    if not (price_lo - market_price <= 0 <= price_hi - market_price):
+        raise ValueError(
+            f"market_price={market_price} is not attainable for sigma in [{lo}, {hi}] "
+            f"(bracket gives [{price_lo:.6f}, {price_hi:.6f}])"
+        )
+
+    sigma = 0.2  # a typical starting guess
+    for _ in range(max_iter):
+        current = price(S, K, T, r, sigma, option_type)
+        diff = current - market_price
+        if abs(diff) < tol:
+            return sigma
+
+        # Narrow the bracket first: price() is monotonically increasing
+        # in sigma, so this alone guarantees bisection can always finish.
+        if diff > 0:
+            hi = sigma
+        else:
+            lo = sigma
+
+        vega = greeks(S, K, T, r, sigma, option_type)["vega"]
+        candidate = sigma - diff / vega if vega > 1e-10 else None
+        if candidate is not None and lo < candidate < hi:
+            sigma = candidate
+        else:
+            sigma = (lo + hi) / 2
+
+    raise RuntimeError(f"implied_vol did not converge after {max_iter} iterations")
+
+
 def _demo():
     S, K, T, r, sigma = 100.0, 100.0, 1.0, 0.05, 0.20
 
@@ -108,6 +150,13 @@ def _demo():
     assert deep_itm_delta > 0.95
     assert deep_otm_delta < 0.05
     print("\nall sanity checks passed")
+
+    # Implied vol should round-trip: price at a known sigma, then solve
+    # for sigma from that price and recover the original input.
+    market_price = price(S, K, T, r, sigma, CALL)
+    solved_sigma = implied_vol(market_price, S, K, T, r, CALL)
+    print(f"\n  implied vol round-trip: sigma={sigma:.4f} -> price={market_price:.4f} -> solved sigma={solved_sigma:.4f}")
+    assert math.isclose(solved_sigma, sigma, abs_tol=1e-6)
 
 
 if __name__ == "__main__":
