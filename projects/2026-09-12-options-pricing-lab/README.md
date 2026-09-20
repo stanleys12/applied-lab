@@ -1,9 +1,10 @@
 # options-pricing-lab
 
 A from-scratch options pricing toolkit — no numpy, no scipy, just
-`math`. Starts with the Black-Scholes closed-form price and Greeks for
-European options, adds implied volatility solving and a binomial tree
-for American options, and will grow into a Monte Carlo pricer.
+`math` and `random`. Black-Scholes closed-form price and Greeks for
+European options, implied volatility solving, a binomial tree for
+American options, and a Monte Carlo pricer — four independent ways to
+arrive at (roughly) the same number, each checked against the others.
 
 ## Why
 
@@ -50,6 +51,15 @@ convergence to the Black-Scholes price, then confirms American and
 European calls agree (no early exercise without dividends) while an
 American put is worth strictly more than its European counterpart.
 
+```bash
+python3 monte_carlo.py
+```
+
+Simulates GBM terminal prices at increasing path counts, comparing the
+discounted-payoff average (with its standard error) to the
+Black-Scholes price, then shows antithetic variates reducing the
+standard error versus plain sampling at the same path count.
+
 ## Current capability
 
 `black_scholes.py`:
@@ -66,6 +76,12 @@ American put is worth strictly more than its European counterpart.
   Rubinstein binomial tree, supports both `EUROPEAN` and `AMERICAN`
   exercise. The European tree converges to `black_scholes.price` as
   `n` grows; American adds early-exercise comparison at each node
+
+`monte_carlo.py`:
+- `mc_price(S, K, T, r, sigma, option_type, n_paths, antithetic, seed)`
+  — simulates GBM terminal prices exactly (no time discretization) and
+  returns `(price, stderr)`; antithetic variates (default on) pair
+  each draw with its mirror to cut sampling noise
 
 ## Tests
 
@@ -91,6 +107,10 @@ itself as ground truth:
   American calls equal European calls (no early exercise without
   dividends) while American puts are worth at least as much as
   European puts
+- **Monte Carlo vs. Black-Scholes within reported standard error** —
+  the MC estimate must land within a few multiples of its own stderr
+  of the closed-form price, and stderr must shrink as path count grows
+  and improve further with antithetic variates
 
 ## Vision / growth plan
 
@@ -100,8 +120,10 @@ itself as ground truth:
   `price()` given a market price~~ done
 - ~~A binomial (CRR) tree pricer for American options, compared against
   Black-Scholes on the European case as a correctness check~~ done
+- ~~A simple Monte Carlo pricer (geometric Brownian motion paths) that
+  converges to the closed-form price as path count grows~~ done
 
-Future increments:
-
-- A simple Monte Carlo pricer (geometric Brownian motion paths) that
-  converges to the closed-form price as path count grows
+This project has reached a natural stopping point: four independent
+pricing methods (closed-form, inverted closed-form, tree, simulation),
+each cross-checked against the others, with a test suite that doesn't
+depend on trusting any single one as ground truth. Marked done.
