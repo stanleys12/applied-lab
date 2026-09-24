@@ -4,7 +4,9 @@ auth-log-anomaly-detector
 
 Reads a stream of authentication log lines and flags patterns worth a
 human's attention: brute-force bursts (many failed logins from one IP
-in a short window). Educational/defensive only.
+in a short window) and credential-stuffing sprays (those failures
+spread across many distinct accounts rather than hammering one).
+Educational/defensive only.
 
 Log line format (one event per line):
     <ISO8601 timestamp> ip=<ip> user=<user> event=success|failure
@@ -116,6 +118,58 @@ def detect_brute_force(entries: list[LogEntry], window_seconds: int = 60, thresh
     return findings
 
 
+def detect_credential_stuffing(entries: list[LogEntry], window_seconds: int = 60, distinct_users_threshold: int = 5):
+    """
+    Flag IPs whose failed logins target >= distinct_users_threshold distinct
+    usernames inside any window_seconds sliding window. This is the
+    credential-stuffing / username-enumeration counterpart to
+    detect_brute_force: that rule catches one IP hammering *one* account,
+    this one catches an IP spraying attempts across *many* accounts, which
+    a per-account threshold would miss entirely.
+
+    Returns a list of dicts, one per distinct burst found, sorted by
+    window start time.
+    """
+    failures_by_ip: dict[str, list[LogEntry]] = {}
+    for e in entries:
+        if e.event == "failure":
+            failures_by_ip.setdefault(e.ip, []).append(e)
+
+    findings = []
+    window = timedelta(seconds=window_seconds)
+
+    for ip, fails in failures_by_ip.items():
+        left = 0
+        user_counts: dict[str, int] = {}
+        n = len(fails)
+        for right in range(n):
+            user_counts[fails[right].user] = user_counts.get(fails[right].user, 0) + 1
+            while fails[right].timestamp - fails[left].timestamp > window:
+                left_user = fails[left].user
+                user_counts[left_user] -= 1
+                if user_counts[left_user] == 0:
+                    del user_counts[left_user]
+                left += 1
+
+            if len(user_counts) >= distinct_users_threshold:
+                burst = fails[left:right + 1]
+                findings.append({
+                    "rule": "credential-stuffing",
+                    "ip": ip,
+                    "window_start": burst[0].timestamp,
+                    "window_end": burst[-1].timestamp,
+                    "count": len(burst),
+                    "users_targeted": sorted(user_counts),
+                })
+                # Reset so one long spray emits one finding, not one per
+                # trailing event inside it.
+                left = right + 1
+                user_counts = {}
+
+    findings.sort(key=lambda f: f["window_start"])
+    return findings
+
+
 def format_finding(f: dict) -> str:
     users = ", ".join(f["users_targeted"])
     return (
@@ -129,10 +183,16 @@ def main(argv=None) -> int:
     parser.add_argument("logfile", help="path to the auth log")
     parser.add_argument("--window", type=int, default=60, help="brute-force window in seconds (default: 60)")
     parser.add_argument("--threshold", type=int, default=5, help="failures within window to flag (default: 5)")
+    parser.add_argument("--stuffing-window", type=int, default=60, help="credential-stuffing window in seconds (default: 60)")
+    parser.add_argument("--stuffing-threshold", type=int, default=5, help="distinct usernames within window to flag (default: 5)")
     args = parser.parse_args(argv)
 
     entries = load_log(args.logfile)
     findings = detect_brute_force(entries, window_seconds=args.window, threshold=args.threshold)
+    findings += detect_credential_stuffing(
+        entries, window_seconds=args.stuffing_window, distinct_users_threshold=args.stuffing_threshold
+    )
+    findings.sort(key=lambda f: f["window_start"])
 
     for f in findings:
         print(format_finding(f))

@@ -2,10 +2,11 @@
 
 A small, from-scratch log-anomaly detector for authentication events.
 Parses a stream of login attempts and flags patterns that deserve a
-human's attention — starting with brute-force bursts (many failed
-logins from one source in a short window). Educational/defensive only:
-it surfaces suspicious patterns in logs you already own, it does not
-attack anything.
+human's attention: brute-force bursts (many failed logins from one
+source in a short window) and credential-stuffing sprays (one source
+failing logins across many distinct accounts). Educational/defensive
+only: it surfaces suspicious patterns in logs you already own, it does
+not attack anything.
 
 ## Why
 
@@ -33,33 +34,46 @@ python3 detector.py samples/auth.log
 ```
 
 Sample output against `samples/auth.log` (normal daily traffic plus an
-embedded brute-force burst against `admin`):
+embedded brute-force burst against `admin` and a credential-stuffing
+spray across five accounts):
 
 ```
 [brute-force] 2026-09-24T10:14:58+00:00 - 2026-09-24T10:15:22+00:00 ip=203.0.113.5 count=5 users=[admin]
+[brute-force] 2026-09-24T14:10:05+00:00 - 2026-09-24T14:10:29+00:00 ip=203.0.113.77 count=5 users=[alice, bob, carol, dave, erin]
+[credential-stuffing] 2026-09-24T14:10:05+00:00 - 2026-09-24T14:10:29+00:00 ip=203.0.113.77 count=5 users=[alice, bob, carol, dave, erin]
 
-18 event(s) parsed, 1 finding(s)
+23 event(s) parsed, 3 finding(s)
 ```
 
-Tune the window/threshold:
+Tune the thresholds:
 
 ```bash
-python3 detector.py samples/auth.log --window 30 --threshold 8
+python3 detector.py samples/auth.log --window 30 --threshold 8 --stuffing-threshold 3
 ```
 
 Exit code is `1` if any finding is present (so it can gate CI), `0` otherwise.
 
+Run the test suite:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
 ## Rules implemented so far
 
 - **brute-force** — >= N failed logins from the same IP within a
-  sliding time window (default: 5 within 60s). Implemented as an O(n)
-  two-pointer sweep per IP rather than a naive O(n²) scan.
+  sliding time window (default: 5 within 60s).
+- **credential-stuffing** — failed logins from the same IP spread
+  across >= N distinct usernames within a sliding time window
+  (default: 5 within 60s) — catches account-spraying that a per-user
+  threshold would miss, even when it also trips brute-force by volume.
+
+Both rules are implemented as an O(n) two-pointer sweep per IP rather
+than a naive O(n²) scan.
 
 ## Roadmap
 
-- credential-stuffing: one IP failing logins against many *distinct*
-  usernames (vs. brute-force hammering a single account)
 - per-user anomalous-success detection (success immediately following
   a failure burst, e.g. the attacker above eventually got in)
 - summary/report mode with severity levels
-- test suite covering parsing edge cases and both rules
+- CSV/JSON output for feeding into other tooling
