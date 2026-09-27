@@ -38,12 +38,20 @@ embedded brute-force burst against `admin` and a credential-stuffing
 spray across five accounts):
 
 ```
-[brute-force] 2026-09-24T10:14:58+00:00 - 2026-09-24T10:15:22+00:00 ip=203.0.113.5 count=5 users=[admin]
-[anomalous-success] 2026-09-24T10:14:58+00:00 - 2026-09-24T10:15:41+00:00 ip=203.0.113.5 count=7 users=[admin]
-[brute-force] 2026-09-24T14:10:05+00:00 - 2026-09-24T14:10:29+00:00 ip=203.0.113.77 count=5 users=[alice, bob, carol, dave, erin]
-[credential-stuffing] 2026-09-24T14:10:05+00:00 - 2026-09-24T14:10:29+00:00 ip=203.0.113.77 count=5 users=[alice, bob, carol, dave, erin]
+[CRITICAL] [anomalous-success] 2026-09-24T10:14:58+00:00 - 2026-09-24T10:15:41+00:00 ip=203.0.113.5 count=7 users=[admin]
+[HIGH    ] [credential-stuffing] 2026-09-24T14:10:05+00:00 - 2026-09-24T14:10:29+00:00 ip=203.0.113.77 count=5 users=[alice, bob, carol, dave, erin]
+[MEDIUM  ] [brute-force] 2026-09-24T10:14:58+00:00 - 2026-09-24T10:15:22+00:00 ip=203.0.113.5 count=5 users=[admin]
+[MEDIUM  ] [brute-force] 2026-09-24T14:10:05+00:00 - 2026-09-24T14:10:29+00:00 ip=203.0.113.77 count=5 users=[alice, bob, carol, dave, erin]
 
-23 event(s) parsed, 4 finding(s)
+23 event(s) parsed, 4 finding(s) (critical=1, high=1, medium=2)
+```
+
+Findings are sorted worst-severity-first (`critical` > `high` > `medium`).
+Use `--min-severity` to cut the noise, e.g. only see things that actually
+got past the front door:
+
+```bash
+python3 detector.py samples/auth.log --min-severity high
 ```
 
 Tune the thresholds:
@@ -78,7 +86,11 @@ python3 -m unittest discover -s tests -v
 All three rules are implemented as an O(n) two-pointer sweep per
 group rather than a naive O(n²) scan.
 
+Each rule has a fixed severity (`anomalous-success` = critical,
+`credential-stuffing` = high, `brute-force` = medium), findings are
+reported worst-first, and the summary line breaks the count down by
+severity.
+
 ## Roadmap
 
-- summary/report mode with severity levels
 - CSV/JSON output for feeding into other tooling

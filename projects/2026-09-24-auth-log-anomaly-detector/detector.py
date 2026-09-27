@@ -25,6 +25,15 @@ LogEntry = namedtuple("LogEntry", ["timestamp", "ip", "user", "event"])
 
 LINE_FIELDS = ("ip", "user", "event")
 
+# Static per-rule severity: anomalous-success means someone likely *got in*,
+# which is worse than a spray/burst that may still have been repelled.
+SEVERITY = {
+    "anomalous-success": "critical",
+    "credential-stuffing": "high",
+    "brute-force": "medium",
+}
+SEVERITY_ORDER = ("critical", "high", "medium", "low")
+
 
 def parse_timestamp(raw: str) -> datetime:
     # datetime.fromisoformat() only accepts a trailing 'Z' since Python 3.11;
@@ -104,6 +113,7 @@ def detect_brute_force(entries: list[LogEntry], window_seconds: int = 60, thresh
                 burst = fails[left:right + 1]
                 findings.append({
                     "rule": "brute-force",
+                    "severity": SEVERITY["brute-force"],
                     "ip": ip,
                     "window_start": burst[0].timestamp,
                     "window_end": burst[-1].timestamp,
@@ -155,6 +165,7 @@ def detect_credential_stuffing(entries: list[LogEntry], window_seconds: int = 60
                 burst = fails[left:right + 1]
                 findings.append({
                     "rule": "credential-stuffing",
+                    "severity": SEVERITY["credential-stuffing"],
                     "ip": ip,
                     "window_start": burst[0].timestamp,
                     "window_end": burst[-1].timestamp,
@@ -201,6 +212,7 @@ def detect_anomalous_success(entries: list[LogEntry], window_seconds: int = 60, 
             if events[right].event == "success" and fail_count >= threshold:
                 findings.append({
                     "rule": "anomalous-success",
+                    "severity": SEVERITY["anomalous-success"],
                     "ip": ip,
                     "window_start": events[left].timestamp,
                     "window_end": events[right].timestamp,
@@ -218,9 +230,19 @@ def detect_anomalous_success(entries: list[LogEntry], window_seconds: int = 60, 
 def format_finding(f: dict) -> str:
     users = ", ".join(f["users_targeted"])
     return (
-        f"[{f['rule']}] {f['window_start'].isoformat()} - {f['window_end'].isoformat()} "
-        f"ip={f['ip']} count={f['count']} users=[{users}]"
+        f"[{f['severity'].upper():<8}] [{f['rule']}] {f['window_start'].isoformat()} - "
+        f"{f['window_end'].isoformat()} ip={f['ip']} count={f['count']} users=[{users}]"
     )
+
+
+def summarize(findings: list[dict]) -> str:
+    """One line per severity level present, ordered worst-first, plus a total."""
+    counts = {sev: 0 for sev in SEVERITY_ORDER}
+    for f in findings:
+        counts[f["severity"]] += 1
+    parts = [f"{sev}={counts[sev]}" for sev in SEVERITY_ORDER if counts[sev]]
+    breakdown = f" ({', '.join(parts)})" if parts else ""
+    return f"{len(findings)} finding(s){breakdown}"
 
 
 def main(argv=None) -> int:
@@ -232,6 +254,10 @@ def main(argv=None) -> int:
     parser.add_argument("--stuffing-threshold", type=int, default=5, help="distinct usernames within window to flag (default: 5)")
     parser.add_argument("--success-window", type=int, default=60, help="anomalous-success window in seconds (default: 60)")
     parser.add_argument("--success-threshold", type=int, default=3, help="failures before a success to flag (default: 3)")
+    parser.add_argument(
+        "--min-severity", choices=SEVERITY_ORDER, default="low",
+        help="only report findings at or above this severity (default: low, i.e. everything)",
+    )
     args = parser.parse_args(argv)
 
     entries = load_log(args.logfile)
@@ -242,12 +268,15 @@ def main(argv=None) -> int:
     findings += detect_anomalous_success(
         entries, window_seconds=args.success_window, threshold=args.success_threshold
     )
-    findings.sort(key=lambda f: f["window_start"])
+
+    min_rank = SEVERITY_ORDER.index(args.min_severity)
+    findings = [f for f in findings if SEVERITY_ORDER.index(f["severity"]) <= min_rank]
+    findings.sort(key=lambda f: (SEVERITY_ORDER.index(f["severity"]), f["window_start"]))
 
     for f in findings:
         print(format_finding(f))
 
-    print(f"\n{len(entries)} event(s) parsed, {len(findings)} finding(s)")
+    print(f"\n{len(entries)} event(s) parsed, {summarize(findings)}")
     return 1 if findings else 0
 
 

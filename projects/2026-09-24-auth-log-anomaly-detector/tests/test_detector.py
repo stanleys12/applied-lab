@@ -1,3 +1,5 @@
+import contextlib
+import io
 import os
 import sys
 import unittest
@@ -12,6 +14,8 @@ from detector import (  # noqa: E402
     detect_brute_force,
     detect_credential_stuffing,
     detect_anomalous_success,
+    summarize,
+    main,
 )
 
 SAMPLE_LOG = os.path.join(os.path.dirname(__file__), "..", "samples", "auth.log")
@@ -154,6 +158,30 @@ class TestAnomalousSuccess(unittest.TestCase):
         entries = load_log(SAMPLE_LOG)
         findings = detect_anomalous_success(entries, window_seconds=60, threshold=3)
         self.assertTrue(any(f["ip"] == "203.0.113.5" and f["users_targeted"] == ["admin"] for f in findings))
+
+
+class TestSummarizeAndSeverity(unittest.TestCase):
+    def test_summarize_breaks_down_by_severity_worst_first(self):
+        findings = [
+            {"severity": "medium"},
+            {"severity": "critical"},
+            {"severity": "high"},
+            {"severity": "medium"},
+        ]
+        self.assertEqual(
+            summarize(findings), "4 finding(s) (critical=1, high=1, medium=2)"
+        )
+
+    def test_summarize_no_breakdown_when_empty(self):
+        self.assertEqual(summarize([]), "0 finding(s)")
+
+    def test_min_severity_filters_lower_severity_findings(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main([SAMPLE_LOG, "--min-severity", "high"])
+        self.assertNotIn("brute-force", out.getvalue())
+        self.assertIn("credential-stuffing", out.getvalue())
+        self.assertIn("anomalous-success", out.getvalue())
 
 
 if __name__ == "__main__":
