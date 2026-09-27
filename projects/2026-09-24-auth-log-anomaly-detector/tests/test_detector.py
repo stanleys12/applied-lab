@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import json
+
 from detector import (  # noqa: E402
     LogEntry,
     parse_line,
@@ -15,6 +17,8 @@ from detector import (  # noqa: E402
     detect_credential_stuffing,
     detect_anomalous_success,
     summarize,
+    findings_to_json,
+    findings_to_csv,
     main,
 )
 
@@ -182,6 +186,35 @@ class TestSummarizeAndSeverity(unittest.TestCase):
         self.assertNotIn("brute-force", out.getvalue())
         self.assertIn("credential-stuffing", out.getvalue())
         self.assertIn("anomalous-success", out.getvalue())
+
+
+class TestJsonAndCsvOutput(unittest.TestCase):
+    def setUp(self):
+        entries = load_log(SAMPLE_LOG)
+        self.findings = detect_anomalous_success(entries, window_seconds=60, threshold=3)
+        self.assertTrue(self.findings)
+
+    def test_json_output_round_trips_and_stringifies_timestamps(self):
+        parsed = json.loads(findings_to_json(self.findings))
+        self.assertEqual(len(parsed), len(self.findings))
+        self.assertIsInstance(parsed[0]["window_start"], str)
+        self.assertEqual(parsed[0]["rule"], "anomalous-success")
+
+    def test_csv_output_has_header_and_semicolon_joined_users(self):
+        text = findings_to_csv(
+            detect_credential_stuffing(load_log(SAMPLE_LOG), window_seconds=60, distinct_users_threshold=5)
+        )
+        lines = text.strip().splitlines()
+        self.assertEqual(lines[0], "severity,rule,window_start,window_end,ip,count,users_targeted")
+        self.assertIn("alice;bob;carol;dave;erin", lines[1])
+
+    def test_main_format_json_emits_valid_json_to_stdout(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main([SAMPLE_LOG, "--format", "json"])
+        parsed = json.loads(out.getvalue())
+        self.assertIsInstance(parsed, list)
+        self.assertTrue(all("severity" in f for f in parsed))
 
 
 if __name__ == "__main__":

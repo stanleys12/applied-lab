@@ -1,15 +1,10 @@
 {
-  "active": {
-    "dir": "projects/2026-09-24-auth-log-anomaly-detector",
-    "theme": "security",
-    "increments_done": 4,
-    "increments_target": 5
-  },
+  "active": null,
   "theme_rotation": [
     "security",
     "ai-ml",
     "fintech"
   ],
   "next_theme_index": 1,
-  "completed_count": 3
+  "completed_count": 4
 }

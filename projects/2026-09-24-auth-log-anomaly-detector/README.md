@@ -60,6 +60,14 @@ Tune the thresholds:
 python3 detector.py samples/auth.log --window 30 --threshold 8 --stuffing-threshold 3 --success-threshold 4
 ```
 
+For feeding findings into other tooling, use `--format json` or
+`--format csv` instead of the human-readable default:
+
+```bash
+python3 detector.py samples/auth.log --format json
+python3 detector.py samples/auth.log --format csv
+```
+
 Exit code is `1` if any finding is present (so it can gate CI), `0` otherwise.
 
 Run the test suite:
@@ -89,8 +97,10 @@ group rather than a naive O(n²) scan.
 Each rule has a fixed severity (`anomalous-success` = critical,
 `credential-stuffing` = high, `brute-force` = medium), findings are
 reported worst-first, and the summary line breaks the count down by
-severity.
+severity. Output can be rendered as human-readable text (default),
+JSON, or CSV via `--format`.
 
-## Roadmap
+## Status
 
-- CSV/JSON output for feeding into other tooling
+Done. All three planned detection rules, severity-ranked reporting,
+and machine-readable output are implemented and tested.

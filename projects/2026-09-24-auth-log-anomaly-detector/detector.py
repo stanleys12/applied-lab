@@ -17,6 +17,9 @@ Example:
 from __future__ import annotations
 
 import argparse
+import csv
+import io
+import json
 import sys
 from collections import namedtuple
 from datetime import datetime, timedelta
@@ -235,6 +238,38 @@ def format_finding(f: dict) -> str:
     )
 
 
+CSV_FIELDS = ("severity", "rule", "window_start", "window_end", "ip", "count", "users_targeted")
+
+
+def findings_to_json(findings: list[dict]) -> str:
+    """Serialize findings to a JSON array, with timestamps as ISO 8601 strings."""
+    serializable = []
+    for f in findings:
+        row = dict(f)
+        row["window_start"] = f["window_start"].isoformat()
+        row["window_end"] = f["window_end"].isoformat()
+        serializable.append(row)
+    return json.dumps(serializable, indent=2)
+
+
+def findings_to_csv(findings: list[dict]) -> str:
+    """Serialize findings to CSV text (one row per finding, users semicolon-joined)."""
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=CSV_FIELDS)
+    writer.writeheader()
+    for f in findings:
+        writer.writerow({
+            "severity": f["severity"],
+            "rule": f["rule"],
+            "window_start": f["window_start"].isoformat(),
+            "window_end": f["window_end"].isoformat(),
+            "ip": f["ip"],
+            "count": f["count"],
+            "users_targeted": ";".join(f["users_targeted"]),
+        })
+    return out.getvalue()
+
+
 def summarize(findings: list[dict]) -> str:
     """One line per severity level present, ordered worst-first, plus a total."""
     counts = {sev: 0 for sev in SEVERITY_ORDER}
@@ -258,6 +293,10 @@ def main(argv=None) -> int:
         "--min-severity", choices=SEVERITY_ORDER, default="low",
         help="only report findings at or above this severity (default: low, i.e. everything)",
     )
+    parser.add_argument(
+        "--format", choices=("text", "json", "csv"), default="text",
+        help="output format: human-readable text, JSON array, or CSV (default: text)",
+    )
     args = parser.parse_args(argv)
 
     entries = load_log(args.logfile)
@@ -273,10 +312,15 @@ def main(argv=None) -> int:
     findings = [f for f in findings if SEVERITY_ORDER.index(f["severity"]) <= min_rank]
     findings.sort(key=lambda f: (SEVERITY_ORDER.index(f["severity"]), f["window_start"]))
 
-    for f in findings:
-        print(format_finding(f))
+    if args.format == "json":
+        print(findings_to_json(findings))
+    elif args.format == "csv":
+        print(findings_to_csv(findings), end="")
+    else:
+        for f in findings:
+            print(format_finding(f))
+        print(f"\n{len(entries)} event(s) parsed, {summarize(findings)}")
 
-    print(f"\n{len(entries)} event(s) parsed, {summarize(findings)}")
     return 1 if findings else 0
 
 
