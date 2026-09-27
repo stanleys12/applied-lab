@@ -39,16 +39,17 @@ spray across five accounts):
 
 ```
 [brute-force] 2026-09-24T10:14:58+00:00 - 2026-09-24T10:15:22+00:00 ip=203.0.113.5 count=5 users=[admin]
+[anomalous-success] 2026-09-24T10:14:58+00:00 - 2026-09-24T10:15:41+00:00 ip=203.0.113.5 count=7 users=[admin]
 [brute-force] 2026-09-24T14:10:05+00:00 - 2026-09-24T14:10:29+00:00 ip=203.0.113.77 count=5 users=[alice, bob, carol, dave, erin]
 [credential-stuffing] 2026-09-24T14:10:05+00:00 - 2026-09-24T14:10:29+00:00 ip=203.0.113.77 count=5 users=[alice, bob, carol, dave, erin]
 
-23 event(s) parsed, 3 finding(s)
+23 event(s) parsed, 4 finding(s)
 ```
 
 Tune the thresholds:
 
 ```bash
-python3 detector.py samples/auth.log --window 30 --threshold 8 --stuffing-threshold 3
+python3 detector.py samples/auth.log --window 30 --threshold 8 --stuffing-threshold 3 --success-threshold 4
 ```
 
 Exit code is `1` if any finding is present (so it can gate CI), `0` otherwise.
@@ -67,13 +68,17 @@ python3 -m unittest discover -s tests -v
   across >= N distinct usernames within a sliding time window
   (default: 5 within 60s) — catches account-spraying that a per-user
   threshold would miss, even when it also trips brute-force by volume.
+- **anomalous-success** — a successful login for a given ip+user
+  immediately following >= N failed logins for that *same* ip+user
+  within a sliding window (default: 3 within 60s) — the "attacker
+  eventually guessed right" case. Grouped by (ip, user) rather than
+  by ip alone, so an unrelated user succeeding from a noisy IP never
+  gets tainted by someone else's failure burst.
 
-Both rules are implemented as an O(n) two-pointer sweep per IP rather
-than a naive O(n²) scan.
+All three rules are implemented as an O(n) two-pointer sweep per
+group rather than a naive O(n²) scan.
 
 ## Roadmap
 
-- per-user anomalous-success detection (success immediately following
-  a failure burst, e.g. the attacker above eventually got in)
 - summary/report mode with severity levels
 - CSV/JSON output for feeding into other tooling

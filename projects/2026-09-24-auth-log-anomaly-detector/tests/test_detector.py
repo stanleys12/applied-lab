@@ -11,6 +11,7 @@ from detector import (  # noqa: E402
     load_log,
     detect_brute_force,
     detect_credential_stuffing,
+    detect_anomalous_success,
 )
 
 SAMPLE_LOG = os.path.join(os.path.dirname(__file__), "..", "samples", "auth.log")
@@ -104,6 +105,55 @@ class TestCredentialStuffing(unittest.TestCase):
         entries = load_log(SAMPLE_LOG)
         findings = detect_credential_stuffing(entries, window_seconds=60, distinct_users_threshold=5)
         self.assertTrue(any(f["ip"] == "203.0.113.77" for f in findings))
+
+
+class TestAnomalousSuccess(unittest.TestCase):
+    def test_flags_success_after_failure_burst_same_user(self):
+        entries = [
+            entry("2026-01-01T00:00:00", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:05", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:10", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:15", "9.9.9.9", "admin", "success"),
+        ]
+        findings = detect_anomalous_success(entries, window_seconds=60, threshold=3)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["users_targeted"], ["admin"])
+        self.assertEqual(findings[0]["count"], 3)
+
+    def test_ignores_success_without_prior_burst(self):
+        entries = [
+            entry("2026-01-01T00:00:00", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:05", "9.9.9.9", "admin", "success"),
+        ]
+        findings = detect_anomalous_success(entries, window_seconds=60, threshold=3)
+        self.assertEqual(findings, [])
+
+    def test_ignores_burst_outside_window_of_success(self):
+        entries = [
+            entry("2026-01-01T00:00:00", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:05", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:10", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:05:00", "9.9.9.9", "admin", "success"),
+        ]
+        findings = detect_anomalous_success(entries, window_seconds=60, threshold=3)
+        self.assertEqual(findings, [])
+
+    def test_does_not_cross_users_on_same_ip(self):
+        # bob's success shouldn't be tainted by admin's failure burst on the
+        # same IP -- grouping is by (ip, user), not ip alone.
+        entries = [
+            entry("2026-01-01T00:00:00", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:05", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:10", "9.9.9.9", "admin", "failure"),
+            entry("2026-01-01T00:00:15", "9.9.9.9", "bob", "success"),
+        ]
+        findings = detect_anomalous_success(entries, window_seconds=60, threshold=3)
+        self.assertEqual(findings, [])
+
+    def test_sample_log_flags_admin_takeover(self):
+        entries = load_log(SAMPLE_LOG)
+        findings = detect_anomalous_success(entries, window_seconds=60, threshold=3)
+        self.assertTrue(any(f["ip"] == "203.0.113.5" and f["users_targeted"] == ["admin"] for f in findings))
 
 
 if __name__ == "__main__":

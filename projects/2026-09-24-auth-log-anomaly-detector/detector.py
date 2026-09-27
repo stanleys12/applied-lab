@@ -170,6 +170,51 @@ def detect_credential_stuffing(entries: list[LogEntry], window_seconds: int = 60
     return findings
 
 
+def detect_anomalous_success(entries: list[LogEntry], window_seconds: int = 60, threshold: int = 3):
+    """
+    Flag a successful login that immediately follows >= threshold failed
+    logins for the *same* ip+user pair within window_seconds — i.e. someone
+    hammered a specific account with failures and then got in. Grouping by
+    (ip, user) rather than by ip alone (like detect_brute_force) means this
+    catches the "attacker eventually guessed right" case without also
+    tripping on an unrelated user who happens to succeed from a noisy IP.
+
+    Returns a list of dicts, one per anomalous success, sorted by time.
+    """
+    by_pair: dict[tuple[str, str], list[LogEntry]] = {}
+    for e in entries:
+        by_pair.setdefault((e.ip, e.user), []).append(e)
+
+    findings = []
+    window = timedelta(seconds=window_seconds)
+
+    for (ip, user), events in by_pair.items():
+        left = 0
+        fail_count = 0
+        for right in range(len(events)):
+            if events[right].event == "failure":
+                fail_count += 1
+            while events[right].timestamp - events[left].timestamp > window:
+                if events[left].event == "failure":
+                    fail_count -= 1
+                left += 1
+            if events[right].event == "success" and fail_count >= threshold:
+                findings.append({
+                    "rule": "anomalous-success",
+                    "ip": ip,
+                    "window_start": events[left].timestamp,
+                    "window_end": events[right].timestamp,
+                    "count": fail_count,
+                    "users_targeted": [user],
+                })
+                # Require a fresh burst before flagging again for this pair.
+                left = right + 1
+                fail_count = 0
+
+    findings.sort(key=lambda f: f["window_start"])
+    return findings
+
+
 def format_finding(f: dict) -> str:
     users = ", ".join(f["users_targeted"])
     return (
@@ -185,12 +230,17 @@ def main(argv=None) -> int:
     parser.add_argument("--threshold", type=int, default=5, help="failures within window to flag (default: 5)")
     parser.add_argument("--stuffing-window", type=int, default=60, help="credential-stuffing window in seconds (default: 60)")
     parser.add_argument("--stuffing-threshold", type=int, default=5, help="distinct usernames within window to flag (default: 5)")
+    parser.add_argument("--success-window", type=int, default=60, help="anomalous-success window in seconds (default: 60)")
+    parser.add_argument("--success-threshold", type=int, default=3, help="failures before a success to flag (default: 3)")
     args = parser.parse_args(argv)
 
     entries = load_log(args.logfile)
     findings = detect_brute_force(entries, window_seconds=args.window, threshold=args.threshold)
     findings += detect_credential_stuffing(
         entries, window_seconds=args.stuffing_window, distinct_users_threshold=args.stuffing_threshold
+    )
+    findings += detect_anomalous_success(
+        entries, window_seconds=args.success_window, threshold=args.success_threshold
     )
     findings.sort(key=lambda f: f["window_start"])
 
