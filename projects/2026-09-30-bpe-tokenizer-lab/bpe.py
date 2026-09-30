@@ -1,5 +1,6 @@
 """Byte-level BPE tokenizer from scratch (stdlib only)."""
 import argparse
+import json
 import sys
 from collections import Counter
 
@@ -56,19 +57,45 @@ class BPETokenizer:
             ids = merge_seq(ids, best, self.merges[best])
         return ids
 
+    def save(self, path):
+        """Persist merges (in priority order) as JSON."""
+        data = {"version": 1, "merges": [[a, b] for a, b in self.merges]}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+    @classmethod
+    def load(cls, path):
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("version") != 1:
+            raise ValueError("unsupported tokenizer file version")
+        tok = cls()
+        for new_id, (a, b) in enumerate(data["merges"], start=256):
+            tok.merges[(a, b)] = new_id
+            tok.vocab[new_id] = tok.vocab[a] + tok.vocab[b]
+        return tok
+
     def decode(self, ids):
         return b"".join(self.vocab[i] for i in ids).decode("utf-8", errors="replace")
 
 
 def main():
     ap = argparse.ArgumentParser(description="Train a byte-level BPE and round-trip text")
-    ap.add_argument("corpus", help="path to training text file")
+    ap.add_argument("corpus", nargs="?", help="path to training text file")
+    ap.add_argument("--save", help="write trained tokenizer to this JSON file")
+    ap.add_argument("--load", help="load tokenizer from JSON instead of training")
     ap.add_argument("--vocab-size", type=int, default=300)
     ap.add_argument("--text", default="the quick brown fox", help="text to encode")
     a = ap.parse_args()
-    with open(a.corpus, encoding="utf-8") as f:
-        corpus = f.read()
-    tok = BPETokenizer().train(corpus, a.vocab_size)
+    if a.load:
+        tok = BPETokenizer.load(a.load)
+    elif a.corpus:
+        with open(a.corpus, encoding="utf-8") as f:
+            tok = BPETokenizer().train(f.read(), a.vocab_size)
+    else:
+        ap.error("provide a corpus or --load")
+    if a.save:
+        tok.save(a.save)
     ids = tok.encode(a.text)
     print(f"merges learned: {len(tok.merges)}")
     print(f"ids: {ids}")
