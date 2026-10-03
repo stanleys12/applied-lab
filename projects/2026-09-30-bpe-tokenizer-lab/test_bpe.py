@@ -35,6 +35,28 @@ class BPETests(unittest.TestCase):
         self.assertEqual(loaded.encode(text), self.tok.encode(text))
         self.assertEqual(loaded.vocab, self.tok.vocab)
 
+    def test_special_tokens_atomic_and_roundtrip(self):
+        self.tok.add_special_tokens(["<|endoftext|>", "<|pad|>"])
+        eot = self.tok.special["<|endoftext|>"]
+        text = "the dog<|endoftext|>the fox<|pad|>"
+        ids = self.tok.encode(text)
+        self.assertEqual(ids.count(eot), 1)
+        self.assertEqual(ids[-1], self.tok.special["<|pad|>"])
+        self.assertEqual(self.tok.decode(ids), text)
+
+    def test_special_tokens_persist(self):
+        self.tok.add_special_tokens(["<|endoftext|>"])
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "t.json")
+            self.tok.save(p)
+            loaded = BPETokenizer.load(p)
+        s = "a<|endoftext|>b"
+        self.assertEqual(loaded.encode(s), self.tok.encode(s))
+
+    def test_empty_special_rejected(self):
+        with self.assertRaises(ValueError):
+            self.tok.add_special_tokens([""])
+
     def test_small_vocab_rejected(self):
         with self.assertRaises(ValueError):
             BPETokenizer().train("aa", 100)
