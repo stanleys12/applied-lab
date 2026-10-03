@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from bpe import BPETokenizer
+from bpe import BPETokenizer, evaluate, sweep
 
 CORPUS = "the quick brown fox jumps over the lazy dog. " * 20
 
@@ -56,6 +56,19 @@ class BPETests(unittest.TestCase):
     def test_empty_special_rejected(self):
         with self.assertRaises(ValueError):
             self.tok.add_special_tokens([""])
+
+    def test_evaluate_stats(self):
+        st = evaluate(self.tok, CORPUS)
+        self.assertEqual(st["bytes"], len(CORPUS))
+        self.assertTrue(st["roundtrip"])
+        self.assertGreater(st["bytes_per_token"], 1.0)
+        self.assertEqual(evaluate(self.tok, "")["bytes_per_token"], 0.0)
+
+    def test_sweep_monotonic_on_train_text(self):
+        rows = sweep(CORPUS, CORPUS, [256, 270, 300])
+        ratios = [r[2]["bytes_per_token"] for r in rows]
+        self.assertEqual(ratios[0], 1.0)
+        self.assertEqual(ratios, sorted(ratios))
 
     def test_small_vocab_rejected(self):
         with self.assertRaises(ValueError):

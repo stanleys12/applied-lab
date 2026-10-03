@@ -108,6 +108,27 @@ class BPETokenizer:
         return b"".join(self.vocab[i] for i in ids).decode("utf-8", errors="replace")
 
 
+def evaluate(tok, text):
+    """Compression stats of `tok` on `text`: bytes, tokens, bytes/token, round-trip."""
+    ids = tok.encode(text)
+    n_bytes = len(text.encode("utf-8"))
+    return {
+        "bytes": n_bytes,
+        "tokens": len(ids),
+        "bytes_per_token": n_bytes / len(ids) if ids else 0.0,
+        "roundtrip": tok.decode(ids) == text,
+    }
+
+
+def sweep(train_text, eval_text, sizes):
+    """Train at each vocab size; report held-out compression."""
+    rows = []
+    for size in sizes:
+        tok = BPETokenizer().train(train_text, size)
+        rows.append((size, len(tok.merges), evaluate(tok, eval_text)))
+    return rows
+
+
 def main():
     ap = argparse.ArgumentParser(description="Train a byte-level BPE and round-trip text")
     ap.add_argument("corpus", nargs="?", help="path to training text file")
@@ -115,8 +136,20 @@ def main():
     ap.add_argument("--load", help="load tokenizer from JSON instead of training")
     ap.add_argument("--vocab-size", type=int, default=300)
     ap.add_argument("--special", nargs="*", default=[], help="special tokens to register, e.g. '<|endoftext|>'")
+    ap.add_argument("--eval", help="held-out text file to report compression on")
+    ap.add_argument("--sweep", type=int, nargs="+", metavar="SIZE",
+                    help="with --eval: train at each vocab size and compare held-out compression")
     ap.add_argument("--text", default="the quick brown fox", help="text to encode")
     a = ap.parse_args()
+    if a.sweep:
+        if not (a.corpus and a.eval):
+            ap.error("--sweep needs a corpus and --eval")
+        with open(a.corpus, encoding="utf-8") as f, open(a.eval, encoding="utf-8") as g:
+            rows = sweep(f.read(), g.read(), a.sweep)
+        print("vocab  merges  bytes/token")
+        for size, merges, st in rows:
+            print(f"{size:5d}  {merges:6d}  {st['bytes_per_token']:.3f}")
+        return
     if a.load:
         tok = BPETokenizer.load(a.load)
     elif a.corpus:
@@ -134,6 +167,11 @@ def main():
     print(f"bytes {len(a.text.encode())} -> tokens {len(ids)}")
     assert tok.decode(ids) == a.text
     print("round-trip OK")
+    if a.eval:
+        with open(a.eval, encoding="utf-8") as f:
+            st = evaluate(tok, f.read())
+        print(f"eval: {st['bytes']} bytes -> {st['tokens']} tokens "
+              f"({st['bytes_per_token']:.3f} bytes/token, round-trip {'OK' if st['roundtrip'] else 'FAIL'})")
 
 
 if __name__ == "__main__":
