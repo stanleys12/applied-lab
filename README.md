@@ -23,4 +23,4 @@ Everything runs on `python3` (stdlib) or `node`, no installs.
 | 2026-09-12 | fintech | [options-pricing-lab](projects/2026-09-12-options-pricing-lab) | done | 5/5 |
 | 2026-09-24 | security | [auth-log-anomaly-detector](projects/2026-09-24-auth-log-anomaly-detector) | done | 5/5 |
 | 2026-09-30 | ai-ml | [bpe-tokenizer-lab](projects/2026-09-30-bpe-tokenizer-lab) | done | 5/5 |
-| 2026-10-06 | fintech | [order-book-sim](projects/2026-10-06-order-book-sim) | wip | 1/5 |
+| 2026-10-06 | fintech | [order-book-sim](projects/2026-10-06-order-book-sim) | wip | 2/5 |
