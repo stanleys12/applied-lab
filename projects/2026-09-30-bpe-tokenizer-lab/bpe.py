@@ -26,8 +26,19 @@ def merge_seq(seq, pair, new_id):
     return out
 
 
+# GPT-2 style pre-tokenizer using stdlib `re`: [^\W\d_] approximates \p{L}.
+# Merges never cross chunk boundaries, so " the" and "the." share tokens.
+PRETOKEN_RE = re.compile(
+    r"'(?:s|t|re|ve|m|ll|d)| ?[^\W\d_]+| ?\d+| ?[^\s\w]+|\s+(?!\S)|\s+")
+
+
+def pretokenize(text):
+    return PRETOKEN_RE.findall(text)
+
+
 class BPETokenizer:
-    def __init__(self):
+    def __init__(self, pretokenize=False):
+        self.pretokenize = pretokenize
         self.merges = {}  # (a, b) -> new id, in insertion (priority) order
         self.vocab = {i: bytes([i]) for i in range(256)}
         self.special = {}  # literal string -> id, allocated after the merges
@@ -47,7 +58,8 @@ class BPETokenizer:
     def train(self, text, vocab_size):
         if vocab_size < 256:
             raise ValueError("vocab_size must be >= 256")
-        seqs = [list(text.encode("utf-8"))]
+        chunks = PRETOKEN_RE.findall(text) if self.pretokenize else [text]
+        seqs = [list(c.encode("utf-8")) for c in chunks]
         for new_id in range(256, vocab_size):
             counts = get_pair_counts(seqs)
             if not counts:
@@ -75,7 +87,14 @@ class BPETokenizer:
         return ids
 
     def _encode_chunk(self, text):
-        ids = list(text.encode("utf-8"))
+        if self.pretokenize:
+            ids = []
+            for piece in PRETOKEN_RE.findall(text):
+                ids.extend(self._bpe(list(piece.encode("utf-8"))))
+            return ids
+        return self._bpe(list(text.encode("utf-8")))
+
+    def _bpe(self, ids):
         while len(ids) >= 2:
             pairs = set(zip(ids, ids[1:]))
             best = min(pairs, key=lambda p: self.merges.get(p, float("inf")))
@@ -87,7 +106,8 @@ class BPETokenizer:
     def save(self, path):
         """Persist merges (in priority order) as JSON."""
         data = {"version": 1, "merges": [[a, b] for a, b in self.merges],
-                "special": self.special}
+                "special": self.special,
+                "pretokenize": self.pretokenize}
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
@@ -97,7 +117,7 @@ class BPETokenizer:
             data = json.load(f)
         if data.get("version") != 1:
             raise ValueError("unsupported tokenizer file version")
-        tok = cls()
+        tok = cls(pretokenize=data.get("pretokenize", False))
         for new_id, (a, b) in enumerate(data["merges"], start=256):
             tok.merges[(a, b)] = new_id
             tok.vocab[new_id] = tok.vocab[a] + tok.vocab[b]
@@ -120,11 +140,11 @@ def evaluate(tok, text):
     }
 
 
-def sweep(train_text, eval_text, sizes):
+def sweep(train_text, eval_text, sizes, pretokenize=False):
     """Train at each vocab size; report held-out compression."""
     rows = []
     for size in sizes:
-        tok = BPETokenizer().train(train_text, size)
+        tok = BPETokenizer(pretokenize).train(train_text, size)
         rows.append((size, len(tok.merges), evaluate(tok, eval_text)))
     return rows
 
@@ -139,13 +159,15 @@ def main():
     ap.add_argument("--eval", help="held-out text file to report compression on")
     ap.add_argument("--sweep", type=int, nargs="+", metavar="SIZE",
                     help="with --eval: train at each vocab size and compare held-out compression")
+    ap.add_argument("--pretokenize", action="store_true",
+                    help="split text with a GPT-2 style regex before BPE (when training)")
     ap.add_argument("--text", default="the quick brown fox", help="text to encode")
     a = ap.parse_args()
     if a.sweep:
         if not (a.corpus and a.eval):
             ap.error("--sweep needs a corpus and --eval")
         with open(a.corpus, encoding="utf-8") as f, open(a.eval, encoding="utf-8") as g:
-            rows = sweep(f.read(), g.read(), a.sweep)
+            rows = sweep(f.read(), g.read(), a.sweep, a.pretokenize)
         print("vocab  merges  bytes/token")
         for size, merges, st in rows:
             print(f"{size:5d}  {merges:6d}  {st['bytes_per_token']:.3f}")
@@ -154,7 +176,7 @@ def main():
         tok = BPETokenizer.load(a.load)
     elif a.corpus:
         with open(a.corpus, encoding="utf-8") as f:
-            tok = BPETokenizer().train(f.read(), a.vocab_size)
+            tok = BPETokenizer(a.pretokenize).train(f.read(), a.vocab_size)
     else:
         ap.error("provide a corpus or --load")
     tok.add_special_tokens(a.special)

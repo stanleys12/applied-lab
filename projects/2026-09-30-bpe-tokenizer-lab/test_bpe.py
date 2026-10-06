@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from bpe import BPETokenizer, evaluate, sweep
+from bpe import BPETokenizer, evaluate, pretokenize, sweep
 
 CORPUS = "the quick brown fox jumps over the lazy dog. " * 20
 
@@ -73,6 +73,30 @@ class BPETests(unittest.TestCase):
     def test_small_vocab_rejected(self):
         with self.assertRaises(ValueError):
             BPETokenizer().train("aa", 100)
+
+
+class TestPretokenize(unittest.TestCase):
+    def test_split(self):
+        self.assertEqual(pretokenize("Hello, world 42!"),
+                         ["Hello", ",", " world", " 42", "!"])
+
+    def test_merges_stay_inside_chunks(self):
+        tok = BPETokenizer(pretokenize=True).train(CORPUS, 300)
+        self.assertTrue(tok.merges)
+        for tid in tok.merges.values():
+            self.assertNotIn(b" ", tok.vocab[tid].lstrip(b" "))
+            self.assertNotIn(b".", tok.vocab[tid][:-1])  # punctuation never mid-token
+
+    def test_roundtrip_and_persist(self):
+        tok = BPETokenizer(pretokenize=True).train(CORPUS, 300)
+        s = "The  fox, naïve café 123\n\tend "
+        self.assertEqual(tok.decode(tok.encode(s)), s)
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "t.json")
+            tok.save(p)
+            loaded = BPETokenizer.load(p)
+        self.assertTrue(loaded.pretokenize)
+        self.assertEqual(loaded.encode(s), tok.encode(s))
 
 
 if __name__ == "__main__":
