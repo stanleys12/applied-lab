@@ -1,8 +1,8 @@
 {
   "active": {
-    "dir": "projects/2026-09-30-bpe-tokenizer-lab",
-    "theme": "ai-ml",
-    "increments_done": 5,
+    "dir": "projects/2026-10-06-order-book-sim",
+    "theme": "fintech",
+    "increments_done": 1,
     "increments_target": 5
   },
   "theme_rotation": [
@@ -10,6 +10,6 @@
     "ai-ml",
     "fintech"
   ],
-  "next_theme_index": 2,
+  "next_theme_index": 0,
   "completed_count": 5
 }
