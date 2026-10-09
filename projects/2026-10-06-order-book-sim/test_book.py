@@ -75,5 +75,41 @@ class TestSim(unittest.TestCase):
                 self.assertLess(bid, ask)
 
 
+class TestAnalytics(unittest.TestCase):
+    def setUp(self):
+        self.ob = OrderBook()
+        self.ob.submit_limit(BUY, 99, 10)
+        self.ob.submit_limit(BUY, 98, 10)
+        self.ob.submit_limit(SELL, 101, 5)
+        self.ob.submit_limit(SELL, 103, 15)
+
+    def test_spread_mid_imbalance(self):
+        import analytics as an
+        self.assertEqual(an.spread(self.ob), 2)
+        self.assertEqual(an.midprice(self.ob), 100)
+        self.assertEqual(an.imbalance(self.ob), 0)  # 20 vs 20
+        self.assertEqual(an.imbalance(self.ob, levels=1), (10 - 5) / 15)
+
+    def test_microprice_leans_to_thin_side(self):
+        import analytics as an
+        # bid size 10, ask size 5 -> ask is thinner, price pulled toward the ask
+        self.assertAlmostEqual(an.microprice(self.ob), (99 * 5 + 101 * 10) / 15)
+
+    def test_vwap(self):
+        import analytics as an
+        self.ob.submit_market(BUY, 10)  # 5 @ 101, 5 @ 103
+        self.assertEqual(an.vwap(self.ob.trades), 102)
+        self.assertIsNone(an.vwap([]))
+
+    def test_impact_cost_does_not_mutate(self):
+        import analytics as an
+        before = self.ob.depth()
+        avg, slip, filled = an.impact_cost(self.ob, BUY, 10)
+        self.assertEqual((avg, slip, filled), (102, 2, 10))
+        self.assertEqual(self.ob.depth(), before)
+        self.assertEqual(an.impact_cost(self.ob, BUY, 100)[2], 20)  # partial
+        self.assertIsNone(an.impact_cost(OrderBook(), BUY, 1))
+
+
 if __name__ == "__main__":
     unittest.main()

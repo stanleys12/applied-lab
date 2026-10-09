@@ -1,5 +1,6 @@
 """Seeded random order-flow simulator driving an OrderBook."""
 import random
+import analytics as an
 from book import BUY, SELL, OrderBook
 
 
@@ -41,6 +42,9 @@ def main():
     print(f"trades: {len(ob.trades)}, volume: {sum(t.qty for t in ob.trades)}")
     print(f"avg spread: {sum(spreads) / len(spreads):.2f} ticks over {len(spreads)} two-sided steps")
     print(f"last trade price: {ob.trades[-1].price}")
+    print(f"VWAP: {an.vwap(ob.trades):.2f}, imbalance(3): {an.imbalance(ob):+.2f}, "
+          f"microprice: {an.microprice(ob):.2f}")
+    print("buy-20 impact (avg px, slippage, filled):", an.impact_cost(ob, "buy", 20))
     print("final book (top 3 levels):")
     bids, asks = ob.depth()
     print("  asks:", asks[:3], "\n  bids:", bids[:3])
