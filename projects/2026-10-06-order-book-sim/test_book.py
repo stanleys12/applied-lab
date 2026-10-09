@@ -62,5 +62,18 @@ class OrderBookTests(unittest.TestCase):
             ob.submit_market(BUY, 0)
 
 
+class TestSim(unittest.TestCase):
+    def test_deterministic_and_never_crossed(self):
+        from sim import simulate
+        a, sa = simulate(steps=500, seed=7)
+        b, sb = simulate(steps=500, seed=7)
+        self.assertEqual(sa, sb)
+        self.assertEqual(len(a.trades), len(b.trades))
+        self.assertGreater(len(a.trades), 0)
+        for _, bid, ask in sa:
+            if bid is not None and ask is not None:
+                self.assertLess(bid, ask)
+
+
 if __name__ == "__main__":
     unittest.main()

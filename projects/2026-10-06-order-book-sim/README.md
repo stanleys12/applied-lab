@@ -9,8 +9,10 @@ spread / depth / VWAP analytics.
 
 ## Run
     python3 book.py
+    python3 sim.py
     python3 test_book.py
 
 ## Increments
 1. Core book: limit orders, price-time matching, trade at resting price, depth view (done)
 2. Market (IOC) orders, order cancellation with lazy heap deletion, unittest suite (done)
+3. Seeded random-flow simulator (`sim.py`): limit/market/cancel mix, determinism + uncrossed-book test (done)
