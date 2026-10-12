@@ -111,5 +111,29 @@ class TestAnalytics(unittest.TestCase):
         self.assertIsNone(an.impact_cost(OrderBook(), BUY, 1))
 
 
+class MarketMakerTests(unittest.TestCase):
+    def test_accounting_identity_and_determinism(self):
+        from marketmaker import MarketMaker
+        from sim import simulate
+        runs = []
+        for _ in range(2):
+            mm = MarketMaker()
+            ob, _ = simulate(steps=1500, seed=3, agent=mm)
+            runs.append((mm.inventory, mm.cash))
+            self.assertLessEqual(abs(mm.inventory), mm.max_inv + mm.size)
+        self.assertEqual(runs[0], runs[1])
+
+    def test_fill_updates_inventory_and_cash(self):
+        from marketmaker import MarketMaker
+        ob = OrderBook()
+        ob.submit_limit(BUY, 98, 1)
+        ob.submit_limit(SELL, 104, 1)
+        mm = MarketMaker(half_spread=1, size=5)
+        mm.on_step(ob)  # quotes 100 / 103
+        ob.submit_market(SELL, 5)  # hits our bid at 100
+        mm.on_step(ob)
+        self.assertEqual((mm.inventory, mm.cash), (5, -500))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,15 +1,17 @@
 """Seeded random order-flow simulator driving an OrderBook."""
 import random
 import analytics as an
+from marketmaker import MarketMaker
 from book import BUY, SELL, OrderBook
 
 
-def simulate(steps=2000, seed=0, start_mid=1000, p_market=0.15, p_cancel=0.2, max_qty=20):
+def simulate(steps=2000, seed=0, start_mid=1000, p_market=0.15, p_cancel=0.2, max_qty=20, agent=None):
     """Generate random flow around a drifting mid. Returns (book, snapshots).
 
     Each snapshot is (step, best_bid, best_ask) taken after the step's event.
     Limit prices are placed at a geometric-ish offset from mid, so most
     liquidity sits near the touch; marketable limits occasionally cross.
+    If `agent` is given, its on_step(book) runs after every random event.
     """
     rng = random.Random(seed)
     ob = OrderBook()
@@ -29,6 +31,8 @@ def simulate(steps=2000, seed=0, start_mid=1000, p_market=0.15, p_cancel=0.2, ma
             px = max(1, mid - offset if side == BUY else mid + offset)
             oid, _ = ob.submit_limit(side, px, qty)
             resting.append(oid)
+        if agent:
+            agent.on_step(ob)
         bid, ask = ob.best_bid(), ob.best_ask()
         if bid is not None and ask is not None:
             mid = (bid + ask) // 2  # mid follows the book, giving a random walk
@@ -48,6 +52,11 @@ def main():
     print("final book (top 3 levels):")
     bids, asks = ob.depth()
     print("  asks:", asks[:3], "\n  bids:", bids[:3])
+
+    mm = MarketMaker()
+    ob, _ = simulate(seed=1, agent=mm)
+    print(f"market maker: inventory {mm.inventory:+d}, cash {mm.cash}, "
+          f"MTM PnL {mm.mark_to_market(ob):.1f}")
 
 
 if __name__ == "__main__":

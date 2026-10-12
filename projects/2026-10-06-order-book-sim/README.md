@@ -17,3 +17,5 @@ spread / depth / VWAP analytics.
 2. Market (IOC) orders, order cancellation with lazy heap deletion, unittest suite (done)
 3. Seeded random-flow simulator (`sim.py`): limit/market/cancel mix, determinism + uncrossed-book test (done)
 4. Analytics (`analytics.py`): spread, mid, microprice, depth imbalance, VWAP, non-mutating impact-cost estimate; wired into sim output (done)
+5. Inventory-skewing market maker (`marketmaker.py`) plugged into the simulator via an `agent` hook; fills, cash and mark-to-market PnL, with tests (done)
+5. Inventory-skewing market maker (`marketmaker.py`) plugged into the simulator via an `agent` hook; fills, cash and mark-to-market PnL, with tests (done)

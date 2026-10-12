@@ -1,15 +1,10 @@
 {
-  "active": {
-    "dir": "projects/2026-10-06-order-book-sim",
-    "theme": "fintech",
-    "increments_done": 4,
-    "increments_target": 5
-  },
+  "active": null,
   "theme_rotation": [
     "security",
     "ai-ml",
     "fintech"
   ],
   "next_theme_index": 0,
-  "completed_count": 5
+  "completed_count": 6
 }
