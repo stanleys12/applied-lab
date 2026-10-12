@@ -32,5 +32,24 @@ class CspTests(unittest.TestCase):
         self.assertIn(("script-src", "medium"), s)
 
 
+class CliTests(unittest.TestCase):
+    def test_score_and_extract(self):
+        from csp import score, extract_headers
+        self.assertEqual(score(audit(parse("script-src 'unsafe-inline'"))), 100 - 30 - 10 - 10 - 3 - 0)
+        dump = "HTTP/1.1 200 OK\nContent-Security-Policy-Report-Only: default-src 'self'\nX-A: b"
+        self.assertEqual(extract_headers(dump),
+                         [("Content-Security-Policy-Report-Only", "default-src 'self'")])
+
+    def test_fail_on_exit_code_and_json(self):
+        import contextlib, io, json
+        from csp import main
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(main(["script-src *", "--json", "--fail-on", "high"]), 1)
+        self.assertEqual(json.loads(out.getvalue())[0]["findings"][0]["severity"], "high")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+                                   "--fail-on", "low"]), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
