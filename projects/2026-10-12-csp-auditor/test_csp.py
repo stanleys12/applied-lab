@@ -86,5 +86,25 @@ class CliTests(unittest.TestCase):
                                    "--fail-on", "low"]), 0)
 
 
+
+class OtherHeaderTests(unittest.TestCase):
+    def test_weak_headers(self):
+        from csp import parse_headers, audit_other_headers
+        h = parse_headers("Strict-Transport-Security: max-age=300\nSet-Cookie: sid=1; Path=/\n"
+                          "Set-Cookie: ok=2; Secure; HttpOnly; SameSite=Lax\nHTTP/1.1 200 OK")
+        msgs = [f.message for f in audit_other_headers(h)]
+        self.assertTrue(any("under 180 days" in m for m in msgs))
+        self.assertTrue(any("'sid' lacks Secure" in m for m in msgs))
+        self.assertFalse(any("'ok'" in m for m in msgs))
+        self.assertTrue(any("nosniff" in m for m in msgs))
+
+    def test_good_headers_clean(self):
+        from csp import parse_headers, audit_other_headers
+        h = parse_headers("Strict-Transport-Security: max-age=31536000; includeSubDomains\n"
+                          "Set-Cookie: a=b; Secure; HttpOnly; SameSite=Strict\n"
+                          "X-Content-Type-Options: nosniff\nReferrer-Policy: no-referrer")
+        self.assertEqual(audit_other_headers(h), [])
+
+
 if __name__ == "__main__":
     unittest.main()

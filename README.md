@@ -24,4 +24,4 @@ Everything runs on `python3` (stdlib) or `node`, no installs.
 | 2026-09-24 | security | [auth-log-anomaly-detector](projects/2026-09-24-auth-log-anomaly-detector) | done | 5/5 |
 | 2026-09-30 | ai-ml | [bpe-tokenizer-lab](projects/2026-09-30-bpe-tokenizer-lab) | done | 5/5 |
 | 2026-10-06 | fintech | [order-book-sim](projects/2026-10-06-order-book-sim) | done | 5/5 |
-| 2026-10-12 | security | [csp-auditor](projects/2026-10-12-csp-auditor) | wip | 3/5 |
+| 2026-10-12 | security | [csp-auditor](projects/2026-10-12-csp-auditor) | wip | 4/5 |

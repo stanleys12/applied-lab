@@ -107,10 +107,53 @@ def extract_headers(text):
     return found
 
 
+def parse_headers(text):
+    """All 'Name: value' lines as {lowercase name: [values]} (Set-Cookie may repeat)."""
+    out = {}
+    for line in text.splitlines():
+        name, sep, value = line.partition(":")
+        if sep and name.strip() and " " not in name.strip():
+            out.setdefault(name.strip().lower(), []).append(value.strip())
+    return out
+
+
+def audit_other_headers(headers):
+    """Non-CSP hardening checks: HSTS, Set-Cookie flags, nosniff, framing, referrer."""
+    out = []
+    add = lambda sev, d, msg: out.append(Finding(sev, d, msg))
+    hsts = headers.get("strict-transport-security")
+    if not hsts:
+        add("medium", "strict-transport-security", "HSTS missing: downgrade/SSL-strip not mitigated")
+    else:
+        m = re.search(r"max-age\s*=\s*\"?(\d+)", hsts[0], re.I)
+        if not m:
+            add("medium", "strict-transport-security", "HSTS has no valid max-age")
+        elif int(m.group(1)) < 15552000:  # 180 days
+            add("low", "strict-transport-security", f"HSTS max-age {m.group(1)}s is under 180 days")
+    for cookie in headers.get("set-cookie", []):
+        cname = cookie.split("=", 1)[0].strip()
+        attrs = {a.strip().split("=")[0].lower(): a.strip().partition("=")[2].lower()
+                 for a in cookie.split(";")[1:]}
+        if "secure" not in attrs:
+            add("medium", "set-cookie", f"cookie {cname!r} lacks Secure: sent over plain HTTP")
+        if "httponly" not in attrs:
+            add("medium", "set-cookie", f"cookie {cname!r} lacks HttpOnly: readable by injected script")
+        if attrs.get("samesite", "") not in ("lax", "strict"):
+            sev = "medium" if attrs.get("samesite") == "none" or "samesite" not in attrs else "low"
+            add(sev, "set-cookie", f"cookie {cname!r} has no restrictive SameSite (CSRF exposure)")
+    if "nosniff" not in " ".join(headers.get("x-content-type-options", [])).lower():
+        add("low", "x-content-type-options", "missing 'nosniff': MIME sniffing enabled")
+    if "referrer-policy" not in headers:
+        add("low", "referrer-policy", "Referrer-Policy missing: full URLs may leak cross-origin")
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Audit a Content-Security-Policy offline.")
     ap.add_argument("policy", nargs="?", help="CSP string (default: a sample weak policy)")
     ap.add_argument("--file", help="header dump file to scan (one 'Name: value' per line)")
+    ap.add_argument("--all-headers", action="store_true",
+                    help="with --file, also audit HSTS, Set-Cookie, nosniff and Referrer-Policy")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--fail-on", choices=RANK, help="exit 1 if any finding is at/above this severity")
     args = ap.parse_args(argv)
@@ -118,12 +161,15 @@ def main(argv=None):
     if args.file:
         with open(args.file) as fh:
             policies = extract_headers(fh.read())
+            extra = audit_other_headers(parse_headers(open(args.file).read())) if args.all_headers else []
         if not policies:
             ap.error("no Content-Security-Policy header found in file")
     else:
         policies = [("Content-Security-Policy", args.policy or
                      "default-src 'self'; script-src 'self' 'unsafe-inline' https:")]
 
+    if not args.file:
+        extra = []
     worst, reports = 0, []
     seen = {}  # nonce -> first header that used it
     for name, header in policies:
@@ -141,6 +187,14 @@ def main(argv=None):
         if not args.json:
             print(f"{name}{note}: score {score(findings)}/100\n  {header}")
             for f in findings:
+                print(f"  [{f.severity:<6}] {f.directive}: {f.message}")
+    if extra:
+        worst = max([worst] + [RANK[f.severity] for f in extra])
+        reports.append({"header": "(other headers)", "policy": None, "score": score(extra),
+                        "report_only": False, "findings": [asdict(f) for f in extra]})
+        if not args.json:
+            print(f"Other headers: score {score(extra)}/100")
+            for f in extra:
                 print(f"  [{f.severity:<6}] {f.directive}: {f.message}")
     if args.json:
         print(json.dumps(reports, indent=2))
