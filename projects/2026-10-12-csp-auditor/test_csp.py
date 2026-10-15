@@ -13,7 +13,7 @@ class CspTests(unittest.TestCase):
 
     def test_strict_policy_is_clean(self):
         self.assertEqual(audit(parse(
-            "default-src 'none'; script-src 'nonce-x' 'strict-dynamic'; object-src 'none'; "
+            "default-src 'none'; script-src 'nonce-Zm9vYmFyYmF6cXV4MTIzNA' 'strict-dynamic'; object-src 'none'; "
             "base-uri 'none'; frame-ancestors 'none'")), [])
 
     def test_unsafe_inline_flagged_unless_nonce(self):
@@ -30,6 +30,41 @@ class CspTests(unittest.TestCase):
     def test_eval_and_http(self):
         s = sev("script-src 'unsafe-eval' http://cdn.example")
         self.assertIn(("script-src", "medium"), s)
+
+
+class NonceTests(unittest.TestCase):
+    GOOD = "'nonce-Zm9vYmFyYmF6cXV4MTIzNA'"
+
+    def test_short_nonce_flagged(self):
+        self.assertIn(("script-src", "medium"), sev("script-src 'nonce-abc'; object-src 'none'"))
+
+    def test_good_nonce_clean_of_nonce_findings(self):
+        from csp import audit_nonces
+        self.assertEqual(audit_nonces(parse(f"script-src {self.GOOD}")), [])
+
+    def test_bad_charset(self):
+        from csp import audit_nonces
+        self.assertIn("base64", audit_nonces(parse("script-src 'nonce-ab$cdefghijklmnopqrstuvwx'"))[0].message)
+
+    def test_strict_dynamic_needs_trust(self):
+        from csp import audit_nonces
+        self.assertEqual(len(audit_nonces(parse("script-src 'strict-dynamic' https://a.example"))), 1)
+        self.assertEqual(audit_nonces(parse(f"script-src {self.GOOD} 'strict-dynamic'")), [])
+
+    def test_nonce_reuse_across_headers_cli(self):
+        import tempfile, os, io, contextlib
+        from csp import main
+        line = f"script-src {self.GOOD}; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
+            fh.write(f"Content-Security-Policy: {line}\nContent-Security-Policy-Report-Only: {line}\n")
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = main(["--file", fh.name, "--fail-on", "high"])
+        finally:
+            os.unlink(fh.name)
+        self.assertEqual(rc, 1)
+        self.assertIn("reused", out.getvalue())
 
 
 class CliTests(unittest.TestCase):

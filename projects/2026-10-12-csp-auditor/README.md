@@ -15,3 +15,4 @@ scoring, file/batch input, report-only policies, nonce reuse checks, and cookie/
 ## Increments
 1. CSP parser + rule-based auditor (unsafe-inline/eval, wildcard sources, missing object-src/base-uri/frame-ancestors) (done)
 2. Scoring (0-100), header-dump input (`--file`, report-only aware), `--json`, `--fail-on` exit codes for CI; CLI tests (done)
+3. Nonce hygiene: length (<128-bit), base64 charset, `'strict-dynamic'` without nonce/hash, nonce reuse across headers in a dump (done)

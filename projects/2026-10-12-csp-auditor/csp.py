@@ -1,6 +1,7 @@
 """Content-Security-Policy parser and weakness auditor (defensive, offline)."""
 import argparse
 import json
+import re
 import sys
 from dataclasses import asdict, dataclass
 
@@ -44,6 +45,7 @@ def audit(policy):
                 add("high", d, f"{src!r} allows scripts from almost anywhere")
             elif s.startswith("*.") or s.startswith("http://"):
                 add("medium", d, f"{src!r} is overly broad or not HTTPS-only")
+    findings.extend(audit_nonces(policy))
     if "object-src" not in policy and "default-src" not in policy:
         add("medium", "object-src", "object-src missing: plugins can be a script vector")
     if "base-uri" not in policy:
@@ -51,6 +53,31 @@ def audit(policy):
     if "frame-ancestors" not in policy:
         add("low", "frame-ancestors", "frame-ancestors missing: clickjacking not mitigated by CSP")
     return findings
+
+
+NONCE_RE = re.compile(r"^'nonce-([^']*)'$", re.I)
+B64_RE = re.compile(r"^[A-Za-z0-9+/_-]+={0,2}$")
+
+
+def nonces(policy):
+    """All nonce values (without quotes) used anywhere in the policy."""
+    return [m.group(1) for srcs in policy.values() for s in srcs if (m := NONCE_RE.match(s))]
+
+
+def audit_nonces(policy):
+    """Nonce hygiene: spec wants >=128 bits of entropy, base64 charset, unique per response."""
+    out = []
+    for n in nonces(policy):
+        if not B64_RE.match(n):
+            out.append(Finding("medium", "script-src", f"nonce {n!r} is not valid base64/base64url"))
+        elif len(n) < 22:  # 16 random bytes encode to >=22 base64 chars
+            out.append(Finding("medium", "script-src", f"nonce {n!r} is under 128 bits; guessable"))
+    scripts = policy.get("script-src", policy.get("default-src", []))
+    has_trust = any(s.lower().startswith(("'nonce-", "'sha256-", "'sha384-", "'sha512-")) for s in scripts)
+    if any(s.lower() == "'strict-dynamic'" for s in scripts) and not has_trust:
+        out.append(Finding("medium", "script-src",
+                           "'strict-dynamic' without nonce/hash has no effect and drops host allowlists"))
+    return out
 
 
 def _has_nonce_or_hash(sources):
@@ -98,8 +125,15 @@ def main(argv=None):
                      "default-src 'self'; script-src 'self' 'unsafe-inline' https:")]
 
     worst, reports = 0, []
+    seen = {}  # nonce -> first header that used it
     for name, header in policies:
-        findings = audit(parse(header))
+        policy = parse(header)
+        findings = audit(policy)
+        for n in set(nonces(policy)):
+            if n in seen:
+                findings.append(Finding("high", "script-src",
+                                        f"nonce {n!r} reused (also in {seen[n]}): nonces must be unique per response"))
+            seen.setdefault(n, name)
         worst = max([worst] + [RANK[f.severity] for f in findings])
         note = " (report-only: not enforced)" if name.lower().endswith("report-only") else ""
         reports.append({"header": name, "policy": header, "score": score(findings),
