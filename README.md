@@ -25,3 +25,4 @@ Everything runs on `python3` (stdlib) or `node`, no installs.
 | 2026-09-30 | ai-ml | [bpe-tokenizer-lab](projects/2026-09-30-bpe-tokenizer-lab) | done | 5/5 |
 | 2026-10-06 | fintech | [order-book-sim](projects/2026-10-06-order-book-sim) | done | 5/5 |
 | 2026-10-12 | security | [csp-auditor](projects/2026-10-12-csp-auditor) | done | 5/5 |
+| 2026-10-21 | ai-ml | [bm25-search-lab](projects/2026-10-21-bm25-search-lab) | wip | 1/5 |
