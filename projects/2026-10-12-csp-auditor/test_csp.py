@@ -105,6 +105,23 @@ class OtherHeaderTests(unittest.TestCase):
                           "X-Content-Type-Options: nosniff\nReferrer-Policy: no-referrer")
         self.assertEqual(audit_other_headers(h), [])
 
+    def test_cookie_prefixes_and_samesite_none(self):
+        from csp import parse_headers, audit_other_headers
+        h = parse_headers("Set-Cookie: __Host-a=1; Secure; Path=/; Domain=x.com; HttpOnly; SameSite=Lax\n"
+                          "Set-Cookie: b=1; HttpOnly; SameSite=None\n"
+                          "Set-Cookie: __Host-ok=1; Secure; Path=/; HttpOnly; SameSite=Strict")
+        msgs = [f.message for f in audit_other_headers(h)]
+        self.assertTrue(any("'__Host-a' violates" in m for m in msgs))
+        self.assertTrue(any("'b' has SameSite=None without Secure" in m for m in msgs))
+        self.assertFalse(any("__Host-ok" in m for m in msgs))
+
+    def test_hsts_preload_rules(self):
+        from csp import parse_headers, audit_other_headers
+        h = parse_headers("Strict-Transport-Security: max-age=20000000; preload")
+        msgs = [f.message for f in audit_other_headers(h)]
+        self.assertTrue(any("includeSubDomains" in m for m in msgs))
+        self.assertTrue(any(">= 1 year" in m for m in msgs))
+
 
 if __name__ == "__main__":
     unittest.main()

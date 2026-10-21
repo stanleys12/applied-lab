@@ -17,3 +17,4 @@ scoring, file/batch input, report-only policies, nonce reuse checks, and cookie/
 2. Scoring (0-100), header-dump input (`--file`, report-only aware), `--json`, `--fail-on` exit codes for CI; CLI tests (done)
 3. Nonce hygiene: length (<128-bit), base64 charset, `'strict-dynamic'` without nonce/hash, nonce reuse across headers in a dump (done)
 4. `--all-headers`: HSTS max-age, Set-Cookie Secure/HttpOnly/SameSite, nosniff, Referrer-Policy audit (done)
+5. Cookie hardening: `__Host-`/`__Secure-` prefix rules, `SameSite=None` needs Secure; HSTS preload requirements; single file read (done)

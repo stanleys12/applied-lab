@@ -130,6 +130,11 @@ def audit_other_headers(headers):
             add("medium", "strict-transport-security", "HSTS has no valid max-age")
         elif int(m.group(1)) < 15552000:  # 180 days
             add("low", "strict-transport-security", f"HSTS max-age {m.group(1)}s is under 180 days")
+        if re.search(r"\bpreload\b", hsts[0], re.I):
+            if not re.search(r"includeSubDomains", hsts[0], re.I):
+                add("medium", "strict-transport-security", "HSTS preload requires includeSubDomains")
+            if m and int(m.group(1)) < 31536000:
+                add("medium", "strict-transport-security", "HSTS preload requires max-age >= 1 year")
     for cookie in headers.get("set-cookie", []):
         cname = cookie.split("=", 1)[0].strip()
         attrs = {a.strip().split("=")[0].lower(): a.strip().partition("=")[2].lower()
@@ -138,6 +143,13 @@ def audit_other_headers(headers):
             add("medium", "set-cookie", f"cookie {cname!r} lacks Secure: sent over plain HTTP")
         if "httponly" not in attrs:
             add("medium", "set-cookie", f"cookie {cname!r} lacks HttpOnly: readable by injected script")
+        if attrs.get("samesite") == "none" and "secure" not in attrs:
+            add("high", "set-cookie", f"cookie {cname!r} has SameSite=None without Secure: browsers reject it")
+        if cname.startswith("__Secure-") and "secure" not in attrs:
+            add("high", "set-cookie", f"cookie {cname!r} uses __Secure- prefix without Secure")
+        if cname.startswith("__Host-") and not ("secure" in attrs and attrs.get("path") == "/"
+                                                 and "domain" not in attrs):
+            add("high", "set-cookie", f"cookie {cname!r} violates __Host- rules (needs Secure, Path=/, no Domain)")
         if attrs.get("samesite", "") not in ("lax", "strict"):
             sev = "medium" if attrs.get("samesite") == "none" or "samesite" not in attrs else "low"
             add(sev, "set-cookie", f"cookie {cname!r} has no restrictive SameSite (CSRF exposure)")
@@ -160,8 +172,9 @@ def main(argv=None):
 
     if args.file:
         with open(args.file) as fh:
-            policies = extract_headers(fh.read())
-            extra = audit_other_headers(parse_headers(open(args.file).read())) if args.all_headers else []
+            text = fh.read()
+        policies = extract_headers(text)
+        extra = audit_other_headers(parse_headers(text)) if args.all_headers else []
         if not policies:
             ap.error("no Content-Security-Policy header found in file")
     else:
