@@ -9,7 +9,9 @@ simple query expansion.
 
 ## Run
     python3 bm25.py "how does momentum help gradient descent"
-    python3 test_bm25.py
+    python3 evaluate.py
+    python3 -m unittest
 
 ## Increments
 1. Tokenizer + inverted index + BM25 scoring CLI over a built-in corpus (done)
+2. Evaluation harness: precision@k, MRR, nDCG@k over graded qrels (`evaluate.py`) (done)
