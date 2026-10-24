@@ -18,6 +18,7 @@ class Index:
         self.docs = []                     # raw text per doc id
         self.lengths = []                  # token count per doc id
         self.postings = defaultdict(dict)  # term -> {doc_id: term frequency}
+        self.positions = defaultdict(dict)  # term -> {doc_id: [token offsets]} for phrase queries
 
     def add(self, text):
         doc_id = len(self.docs)
@@ -26,11 +27,26 @@ class Index:
         self.lengths.append(len(tokens))
         for term, tf in Counter(tokens).items():
             self.postings[term][doc_id] = tf
+        for pos, term in enumerate(tokens):
+            self.positions[term].setdefault(doc_id, []).append(pos)
         return doc_id
 
     def idf(self, term):
         n, df = len(self.docs), len(self.postings.get(term, ()))
         return math.log(1 + (n - df + 0.5) / (df + 0.5))  # always positive (Lucene variant)
+
+    def phrase_docs(self, phrase):
+        """Doc ids containing the phrase's tokens consecutively. Stopwords are dropped
+        first, so "gradient of the loss" matches the adjacent tokens gradient, loss."""
+        terms = tokenize(phrase)
+        if not terms or any(t not in self.positions for t in terms):
+            return set()
+        hits = set(self.positions[terms[0]])
+        for t in terms[1:]:
+            hits &= set(self.positions[t])
+        return {d for d in hits
+                if any(all(p + i in self.positions[t][d] for i, t in enumerate(terms))
+                       for p in self.positions[terms[0]][d])}
 
     def search(self, query, top_k=5, scorer="bm25"):
         """Rank docs; only docs containing at least one query term are scored.
@@ -43,6 +59,13 @@ class Index:
         if not self.docs:
             return []
         avg_len = sum(self.lengths) / len(self.docs) or 1.0
+        # "quoted phrases" are hard filters; their terms also contribute to the ranking
+        phrases = re.findall(r'"([^"]*)"', query)
+        allowed = None
+        for ph in phrases:
+            docs = self.phrase_docs(ph)
+            allowed = docs if allowed is None else allowed & docs
+        query = query.replace('"', " ")
         scores = defaultdict(float)
         for term in set(tokenize(query)):
             idf = self.idf(term)
@@ -52,6 +75,8 @@ class Index:
                     continue
                 norm = 1 - self.b + self.b * self.lengths[doc_id] / avg_len
                 scores[doc_id] += idf * tf * (self.k1 + 1) / (tf + self.k1 * norm)
+        if allowed is not None:
+            scores = {d: sc for d, sc in scores.items() if d in allowed}
         ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
         return ranked[:top_k]
 

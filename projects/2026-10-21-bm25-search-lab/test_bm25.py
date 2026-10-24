@@ -28,6 +28,20 @@ class BM25Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             idx.search("python", scorer="nope")
 
+    def test_phrase_filter(self):
+        idx = Index()
+        idx.add("gradient descent is simple")
+        idx.add("descent of the gradient is steep")
+        self.assertEqual([d for d, _ in idx.search("gradient descent")], [0, 1])
+        self.assertEqual([d for d, _ in idx.search('"gradient descent"')], [0])
+        self.assertEqual(idx.search('"simple gradient" descent'), [])
+        self.assertEqual(idx.search('"nonexistent phrase"'), [])
+
+    def test_stopwords_inside_phrase(self):
+        idx = Index()
+        idx.add("the cost of the loss")
+        self.assertEqual([d for d, _ in idx.search('"cost of loss"')], [0])
+
     def test_no_match_and_empty(self):
         self.assertEqual(Index().search("x"), [])
         idx = Index()
