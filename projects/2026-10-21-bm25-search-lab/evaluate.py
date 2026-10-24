@@ -51,10 +51,12 @@ def main():
     idx = Index()
     for doc in CORPUS:
         idx.add(doc)
-    rows, means = evaluate(lambda q: [d for d, _ in idx.search(q, top_k=10)])
-    for q, r in rows.items():
-        print(f"{q:28s} " + "  ".join(f"{m}={v:.2f}" for m, v in r.items()))
-    print(f"{'MEAN':28s} " + "  ".join(f"{m}={v:.2f}" for m, v in means.items()))
+    for scorer in ("bm25", "tfidf"):
+        rows, means = evaluate(lambda q: [d for d, _ in idx.search(q, top_k=10, scorer=scorer)])
+        print(f"== {scorer} ==")
+        for q, r in rows.items():
+            print(f"{q:28s} " + "  ".join(f"{m}={v:.2f}" for m, v in r.items()))
+        print(f"{'MEAN':28s} " + "  ".join(f"{m}={v:.2f}" for m, v in means.items()))
 
 
 if __name__ == "__main__":

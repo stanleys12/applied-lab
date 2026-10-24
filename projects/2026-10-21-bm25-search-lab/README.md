@@ -15,3 +15,4 @@ simple query expansion.
 ## Increments
 1. Tokenizer + inverted index + BM25 scoring CLI over a built-in corpus (done)
 2. Evaluation harness: precision@k, MRR, nDCG@k over graded qrels (`evaluate.py`) (done)
+3. TF-IDF baseline scorer (`--tfidf`, `search(scorer=...)`) and side-by-side eval; the two tie on the 8-doc corpus, so a larger corpus is a good future addition (done)

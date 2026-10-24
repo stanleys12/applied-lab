@@ -32,8 +32,14 @@ class Index:
         n, df = len(self.docs), len(self.postings.get(term, ()))
         return math.log(1 + (n - df + 0.5) / (df + 0.5))  # always positive (Lucene variant)
 
-    def search(self, query, top_k=5):
-        """Rank docs by BM25; only docs containing at least one query term are scored."""
+    def search(self, query, top_k=5, scorer="bm25"):
+        """Rank docs; only docs containing at least one query term are scored.
+
+        scorer="bm25" is Okapi BM25; "tfidf" is classic (1+log tf) * idf with no
+        length normalisation, kept as a baseline for comparison.
+        """
+        if scorer not in ("bm25", "tfidf"):
+            raise ValueError(f"unknown scorer {scorer!r}")
         if not self.docs:
             return []
         avg_len = sum(self.lengths) / len(self.docs) or 1.0
@@ -41,6 +47,9 @@ class Index:
         for term in set(tokenize(query)):
             idf = self.idf(term)
             for doc_id, tf in self.postings.get(term, {}).items():
+                if scorer == "tfidf":
+                    scores[doc_id] += idf * (1 + math.log(tf))
+                    continue
                 norm = 1 - self.b + self.b * self.lengths[doc_id] / avg_len
                 scores[doc_id] += idf * tf * (self.k1 + 1) / (tf + self.k1 * norm)
         ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
@@ -60,13 +69,17 @@ CORPUS = [
 
 
 def main(argv=None):
-    argv = sys.argv[1:] if argv is None else argv
+    argv = list(sys.argv[1:] if argv is None else argv)
+    scorer = "bm25"
+    if "--tfidf" in argv:
+        argv.remove("--tfidf")
+        scorer = "tfidf"
     query = " ".join(argv) or "gradient descent loss"
     idx = Index()
     for doc in CORPUS:
         idx.add(doc)
-    print(f"query: {query!r}")
-    for doc_id, score in idx.search(query):
+    print(f"query: {query!r} ({scorer})")
+    for doc_id, score in idx.search(query, scorer=scorer):
         print(f"  {score:6.3f}  [{doc_id}] {idx.docs[doc_id]}")
 
 

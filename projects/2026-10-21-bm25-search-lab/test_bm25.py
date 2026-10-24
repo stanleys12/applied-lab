@@ -19,6 +19,15 @@ class BM25Tests(unittest.TestCase):
         idx.add("python " + "filler " * 30)
         self.assertEqual([d for d, _ in idx.search("python")], [0, 1])
 
+    def test_tfidf_ignores_length(self):
+        idx = Index()
+        idx.add("python")
+        idx.add("python " + "filler " * 30)
+        scores = [s for _, s in idx.search("python", scorer="tfidf")]
+        self.assertEqual(scores[0], scores[1])  # BM25 would separate them
+        with self.assertRaises(ValueError):
+            idx.search("python", scorer="nope")
+
     def test_no_match_and_empty(self):
         self.assertEqual(Index().search("x"), [])
         idx = Index()
