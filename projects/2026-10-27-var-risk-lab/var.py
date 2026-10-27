@@ -39,6 +39,38 @@ def parametric_cvar(returns, alpha=0.99):
     return -mean(returns) + stdev(returns) * nd.pdf(z) / (1 - alpha)
 
 
+def backtest(returns, var_fn, alpha=0.99, window=250):
+    """Rolling one-day-ahead backtest: VaR from the previous `window` returns vs the realised
+    return. Returns (exceedances, observations)."""
+    if len(returns) <= window:
+        raise ValueError("need more returns than the window")
+    hits = sum(1 for t in range(window, len(returns))
+               if -returns[t] > var_fn(returns[t - window:t], alpha))
+    return hits, len(returns) - window
+
+
+def kupiec_pof(hits, n, alpha=0.99):
+    """Kupiec proportion-of-failures test. Returns (LR statistic, p-value); a small p-value
+    means the exceedance rate is inconsistent with 1-alpha (chi-squared, 1 dof)."""
+    p = 1 - alpha
+
+    def ll(q):  # binomial log-likelihood, with 0*log(0) = 0
+        return (n - hits) * math.log(1 - q) + (hits * math.log(q) if hits else 0.0)
+
+    lr = max(-2 * (ll(p) - ll(hits / n)), 0.0)
+    return lr, math.erfc(math.sqrt(lr / 2))
+
+
+def backtest_report(returns, alpha=0.99, window=250):
+    lines = [f"backtest {alpha:.0%} VaR, window={window}, expected rate {1 - alpha:.1%}"]
+    for name, fn in (("historical", historical_var), ("parametric", parametric_var)):
+        hits, n = backtest(returns, fn, alpha, window)
+        lr, pval = kupiec_pof(hits, n, alpha)
+        verdict = "REJECT" if pval < 0.05 else "ok"
+        lines.append(f"  {name:10s} {hits:3d}/{n} = {hits / n:5.2%}  LR={lr:5.2f}  p={pval:.3f}  {verdict}")
+    return "\n".join(lines)
+
+
 def report(returns, alphas=(0.95, 0.99), notional=1_000_000):
     lines = [f"{len(returns)} daily returns, notional ${notional:,.0f}"]
     for a in alphas:
@@ -53,6 +85,8 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     returns = [float(x) for x in argv] if argv else synthetic_returns()
     print(report(returns))
+    if len(returns) > 250:
+        print(backtest_report(returns))
 
 
 if __name__ == "__main__":

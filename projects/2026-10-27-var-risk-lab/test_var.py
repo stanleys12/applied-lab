@@ -1,5 +1,7 @@
+import math
 import unittest
-from var import historical_var, historical_cvar, parametric_var, parametric_cvar, synthetic_returns
+from var import (historical_var, historical_cvar, parametric_var, parametric_cvar,
+                 synthetic_returns, backtest, kupiec_pof)
 
 
 class VarTests(unittest.TestCase):
@@ -24,6 +26,34 @@ class VarTests(unittest.TestCase):
     def test_fat_tails_break_normal_assumption(self):
         r = synthetic_returns(n=5000)
         self.assertGreater(historical_cvar(r, 0.99), parametric_cvar(r, 0.99) * 0.9)
+
+
+class BacktestTests(unittest.TestCase):
+    def test_kupiec_perfect_rate_not_rejected(self):
+        lr, p = kupiec_pof(5, 500, 0.99)
+        self.assertAlmostEqual(lr, 0.0, places=9)
+        self.assertGreater(p, 0.99)
+
+    def test_kupiec_known_value(self):
+        # 10 hits in 250 at 99%: LR = 2*(48.4638 - 41.9859) = 12.956 by hand, clearly rejected
+        lr, p = kupiec_pof(10, 250, 0.99)
+        self.assertAlmostEqual(lr, 12.956, places=2)
+        self.assertLess(p, 0.001)
+
+    def test_kupiec_zero_hits(self):
+        lr, p = kupiec_pof(0, 250, 0.99)
+        self.assertAlmostEqual(lr, -2 * 250 * math.log(0.99), places=9)
+        self.assertLess(p, 0.05)  # too few hits is also rejected: VaR is over-conservative
+
+    def test_backtest_counts_window(self):
+        r = synthetic_returns(n=600)
+        hits, n = backtest(r, historical_var, 0.99, 250)
+        self.assertEqual(n, 350)
+        self.assertTrue(0 <= hits <= n)
+
+    def test_backtest_short_series(self):
+        with self.assertRaises(ValueError):
+            backtest([0.01] * 10, historical_var)
 
 
 if __name__ == "__main__":

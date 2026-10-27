@@ -14,3 +14,4 @@ multi-asset portfolios with a covariance matrix.
 
 ## Increments
 1. Historical and parametric VaR/CVaR, synthetic fat-tailed returns, report CLI (done)
+2. Rolling-window backtest + Kupiec proportion-of-failures test (`backtest_report`, printed when >250 returns) (done)
