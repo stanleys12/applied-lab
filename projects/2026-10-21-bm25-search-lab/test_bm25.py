@@ -49,5 +49,28 @@ class BM25Tests(unittest.TestCase):
         self.assertEqual(idx.search("zzz"), [])
 
 
+class ExpandTests(unittest.TestCase):
+    def setUp(self):
+        from bm25 import CORPUS
+        self.idx = Index()
+        for d in CORPUS:
+            self.idx.add(d)
+
+    def test_adds_new_terms_from_top_docs(self):
+        q = self.idx.expand("momentum")
+        self.assertTrue(q.startswith("momentum "))
+        self.assertGreater(len(q.split()), 1)
+        self.assertNotIn("momentum", q.split()[1:])
+
+    def test_expansion_pulls_in_related_doc(self):
+        plain = [d for d, _ in self.idx.search("loss", top_k=10)]
+        expanded = [d for d, _ in self.idx.search(self.idx.expand("loss"), top_k=10)]
+        self.assertNotIn(7, plain)
+        self.assertIn(7, expanded)
+
+    def test_no_hits_returns_query(self):
+        self.assertEqual(self.idx.expand("zzzz"), "zzzz")
+
+
 if __name__ == "__main__":
     unittest.main()

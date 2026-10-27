@@ -80,6 +80,18 @@ class Index:
         ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
         return ranked[:top_k]
 
+    def expand(self, query, fb_docs=2, fb_terms=3):
+        """Pseudo-relevance feedback: take the top fb_docs results, pick the fb_terms
+        highest tf*idf terms not already in the query, and append them."""
+        base = set(tokenize(query.replace('"', " ")))
+        weights = defaultdict(float)
+        for doc_id, _ in self.search(query, top_k=fb_docs):
+            for term, tf in Counter(tokenize(self.docs[doc_id])).items():
+                if term not in base:
+                    weights[term] += tf * self.idf(term)
+        best = sorted(weights, key=lambda t: (-weights[t], t))[:fb_terms]
+        return query + " " + " ".join(best) if best else query
+
 
 CORPUS = [
     "Gradient descent updates parameters by following the negative gradient of the loss.",
@@ -99,10 +111,15 @@ def main(argv=None):
     if "--tfidf" in argv:
         argv.remove("--tfidf")
         scorer = "tfidf"
+    expand = "--expand" in argv
+    if expand:
+        argv.remove("--expand")
     query = " ".join(argv) or "gradient descent loss"
     idx = Index()
     for doc in CORPUS:
         idx.add(doc)
+    if expand:
+        query = idx.expand(query)
     print(f"query: {query!r} ({scorer})")
     for doc_id, score in idx.search(query, scorer=scorer):
         print(f"  {score:6.3f}  [{doc_id}] {idx.docs[doc_id]}")

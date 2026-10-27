@@ -9,6 +9,7 @@ simple query expansion.
 
 ## Run
     python3 bm25.py "how does momentum help gradient descent"
+    python3 bm25.py --expand loss
     python3 evaluate.py
     python3 -m unittest
 
@@ -17,3 +18,4 @@ simple query expansion.
 2. Evaluation harness: precision@k, MRR, nDCG@k over graded qrels (`evaluate.py`) (done)
 3. TF-IDF baseline scorer (`--tfidf`, `search(scorer=...)`) and side-by-side eval; the two tie on the 8-doc corpus, so a larger corpus is a good future addition (done)
 4. Positional index + `"quoted phrase"` queries as hard filters (stopwords dropped before adjacency check) (done)
+5. Pseudo-relevance feedback query expansion (`Index.expand`, `--expand`): appends top tf*idf terms from the top-2 hits, so `loss` also surfaces the momentum doc (done)
