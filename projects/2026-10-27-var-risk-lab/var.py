@@ -39,6 +39,37 @@ def parametric_cvar(returns, alpha=0.99):
     return -mean(returns) + stdev(returns) * nd.pdf(z) / (1 - alpha)
 
 
+def excess_kurtosis(returns):
+    m, n = mean(returns), len(returns)
+    var = sum((r - m) ** 2 for r in returns) / n
+    return sum((r - m) ** 4 for r in returns) / n / var ** 2 - 3
+
+
+def monte_carlo_losses(returns, n_sims=20000, dist="normal", seed=1):
+    """Simulated one-day losses from a distribution fitted to `returns`.
+    dist="normal": Gaussian. dist="t": Student-t with df moment-matched to the sample excess
+    kurtosis (df = 4 + 6/k, clamped to [4.5, 60]) and scaled to the sample stdev."""
+    rng = random.Random(seed)
+    mu, sd = mean(returns), stdev(returns)
+    if dist == "normal":
+        return [-rng.gauss(mu, sd) for _ in range(n_sims)]
+    if dist != "t":
+        raise ValueError(f"unknown dist {dist!r}")
+    k = excess_kurtosis(returns)
+    df = 60.0 if k <= 0.1 else min(60.0, max(4.5, 4 + 6 / k))
+    scale = sd * math.sqrt((df - 2) / df)
+    return [-(mu + scale * rng.gauss(0, 1) / math.sqrt(rng.gammavariate(df / 2, 2) / df))
+            for _ in range(n_sims)]
+
+
+def monte_carlo_var(returns, alpha=0.99, dist="normal", n_sims=20000, seed=1):
+    """VaR and CVaR (loss tuple) from Monte Carlo simulation. Returns (var, cvar)."""
+    losses = sorted(monte_carlo_losses(returns, n_sims, dist, seed))
+    idx = min(len(losses) - 1, math.ceil(alpha * len(losses)) - 1)
+    var = max(losses[idx], 0.0)
+    return var, mean(losses[idx:])
+
+
 def backtest(returns, var_fn, alpha=0.99, window=250):
     """Rolling one-day-ahead backtest: VaR from the previous `window` returns vs the realised
     return. Returns (exceedances, observations)."""
@@ -78,6 +109,9 @@ def report(returns, alphas=(0.95, 0.99), notional=1_000_000):
                          ("param VaR", parametric_var), ("param CVaR", parametric_cvar)):
             v = fn(returns, a)
             lines.append(f"  {a:.0%} {name:10s} {v:7.3%}  ${v * notional:>10,.0f}")
+        for dist in ("normal", "t"):
+            v, c = monte_carlo_var(returns, a, dist)
+            lines.append(f"  {a:.0%} MC-{dist:6s} VaR {v:7.3%}  CVaR {c:7.3%}")
     return "\n".join(lines)
 
 

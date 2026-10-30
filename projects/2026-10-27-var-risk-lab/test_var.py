@@ -1,7 +1,8 @@
 import math
 import unittest
 from var import (historical_var, historical_cvar, parametric_var, parametric_cvar,
-                 synthetic_returns, backtest, kupiec_pof)
+                 synthetic_returns, backtest, kupiec_pof,
+                 monte_carlo_var, excess_kurtosis)
 
 
 class VarTests(unittest.TestCase):
@@ -26,6 +27,27 @@ class VarTests(unittest.TestCase):
     def test_fat_tails_break_normal_assumption(self):
         r = synthetic_returns(n=5000)
         self.assertGreater(historical_cvar(r, 0.99), parametric_cvar(r, 0.99) * 0.9)
+
+
+class MonteCarloTests(unittest.TestCase):
+    def test_normal_mc_close_to_parametric(self):
+        r = synthetic_returns(n=2000)
+        v, c = monte_carlo_var(r, 0.99, "normal", n_sims=100000)
+        self.assertAlmostEqual(v, parametric_var(r, 0.99), delta=0.002)
+        self.assertGreaterEqual(c, v)
+
+    def test_t_has_fatter_tail_than_normal_at_99(self):
+        r = synthetic_returns(n=3000)
+        self.assertGreater(excess_kurtosis(r), 0.5)
+        _, c_n = monte_carlo_var(r, 0.99, "normal", n_sims=100000)
+        _, c_t = monte_carlo_var(r, 0.99, "t", n_sims=100000)
+        self.assertGreater(c_t, c_n)
+
+    def test_deterministic_seed_and_bad_dist(self):
+        r = synthetic_returns()
+        self.assertEqual(monte_carlo_var(r, dist="t"), monte_carlo_var(r, dist="t"))
+        with self.assertRaises(ValueError):
+            monte_carlo_var(r, dist="laplace")
 
 
 class BacktestTests(unittest.TestCase):
