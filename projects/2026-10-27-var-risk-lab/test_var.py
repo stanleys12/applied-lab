@@ -2,7 +2,7 @@ import math
 import unittest
 from var import (historical_var, historical_cvar, parametric_var, parametric_cvar,
                  synthetic_returns, backtest, kupiec_pof,
-                 monte_carlo_var, excess_kurtosis)
+                 monte_carlo_var, excess_kurtosis, traffic_light, binom_cdf)
 
 
 class VarTests(unittest.TestCase):
@@ -72,6 +72,16 @@ class BacktestTests(unittest.TestCase):
         hits, n = backtest(r, historical_var, 0.99, 250)
         self.assertEqual(n, 350)
         self.assertTrue(0 <= hits <= n)
+
+    def test_traffic_light_matches_basel_zones(self):
+        zones = [traffic_light(h) for h in range(0, 13)]
+        self.assertEqual(zones[:5], ["green"] * 5)
+        self.assertEqual(zones[5:10], ["yellow"] * 5)
+        self.assertEqual(zones[10:], ["red"] * 3)
+
+    def test_binom_cdf_edges(self):
+        self.assertAlmostEqual(binom_cdf(250, 250, 0.01), 1.0)
+        self.assertAlmostEqual(binom_cdf(0, 10, 0.5), 1 / 1024)
 
     def test_backtest_short_series(self):
         with self.assertRaises(ValueError):

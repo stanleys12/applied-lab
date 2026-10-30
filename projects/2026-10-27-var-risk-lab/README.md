@@ -16,3 +16,4 @@ multi-asset portfolios with a covariance matrix.
 1. Historical and parametric VaR/CVaR, synthetic fat-tailed returns, report CLI (done)
 2. Rolling-window backtest + Kupiec proportion-of-failures test (`backtest_report`, printed when >250 returns) (done)
 3. Monte Carlo VaR/CVaR: Gaussian and kurtosis-matched Student-t simulation (done)
+4. Basel traffic-light zones from the binomial CDF, shown for the last 250 days in the backtest report (done)

@@ -92,13 +92,30 @@ def kupiec_pof(hits, n, alpha=0.99):
     return lr, math.erfc(math.sqrt(lr / 2))
 
 
+def binom_cdf(k, n, p):
+    """P(X <= k) for X ~ Binomial(n, p), summed term by term (stable for the n used here)."""
+    return sum(math.comb(n, i) * p ** i * (1 - p) ** (n - i) for i in range(k + 1))
+
+
+def traffic_light(hits, n=250, alpha=0.99):
+    """Basel traffic-light zone for `hits` exceedances in n days. Green while the cumulative
+    binomial probability is below 95%, yellow below 99.99%, red beyond. For n=250, alpha=99%
+    this reproduces the Basel zones: green 0-4, yellow 5-9, red 10+."""
+    cum = binom_cdf(hits, n, 1 - alpha)
+    return "green" if cum < 0.95 else "yellow" if cum < 0.9999 else "red"
+
+
 def backtest_report(returns, alpha=0.99, window=250):
     lines = [f"backtest {alpha:.0%} VaR, window={window}, expected rate {1 - alpha:.1%}"]
     for name, fn in (("historical", historical_var), ("parametric", parametric_var)):
         hits, n = backtest(returns, fn, alpha, window)
         lr, pval = kupiec_pof(hits, n, alpha)
         verdict = "REJECT" if pval < 0.05 else "ok"
-        lines.append(f"  {name:10s} {hits:3d}/{n} = {hits / n:5.2%}  LR={lr:5.2f}  p={pval:.3f}  {verdict}")
+        # Basel zones are defined on 250-day windows; use the most recent 250 exceedances
+        recent = sum(1 for t in range(len(returns) - 250, len(returns))
+                     if -returns[t] > fn(returns[t - window:t], alpha))
+        lines.append(f"  {name:10s} {hits:3d}/{n} = {hits / n:5.2%}  LR={lr:5.2f}  p={pval:.3f}  {verdict:6s}"
+                     f" last-250: {recent} ({traffic_light(recent, 250, alpha)})")
     return "\n".join(lines)
 
 
