@@ -70,6 +70,42 @@ def monte_carlo_var(returns, alpha=0.99, dist="normal", n_sims=20000, seed=1):
     return var, mean(losses[idx:])
 
 
+def covariance_matrix(series):
+    """Sample covariance matrix of equal-length return series (one list per asset)."""
+    n = len(series[0])
+    if any(len(x) != n for x in series) or n < 2:
+        raise ValueError("series must be equal length with at least 2 observations")
+    mus = [mean(x) for x in series]
+    return [[sum((a - ma) * (b - mb) for a, b in zip(xa, xb)) / (n - 1)
+             for xb, mb in zip(series, mus)] for xa, ma in zip(series, mus)]
+
+
+def portfolio_var(series, weights, alpha=0.99):
+    """Variance-covariance portfolio VaR with Euler component attribution.
+    Returns (var, components): components[i] = w_i * (cov w)_i / sigma_p * z (+ mean term
+    split by weight), so they sum exactly to var."""
+    if len(weights) != len(series):
+        raise ValueError("one weight per asset")
+    cov = covariance_matrix(series)
+    cw = [sum(c * w for c, w in zip(row, weights)) for row in cov]
+    sigma_p = math.sqrt(sum(w * x for w, x in zip(weights, cw)))
+    z = NormalDist().inv_cdf(alpha)
+    mu_i = [mean(x) for x in series]
+    comps = [w * (-m + z * c / sigma_p) for w, m, c in zip(weights, mu_i, cw)]
+    return sum(comps), comps
+
+
+def correlated_synthetic(n=750, rho=0.6, seed=11):
+    """Two synthetic assets sharing a common factor, for portfolio demos."""
+    rng = random.Random(seed)
+    a, b = [], []
+    for _ in range(n):
+        f, e1, e2 = rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1)
+        a.append(0.0004 + 0.01 * (math.sqrt(rho) * f + math.sqrt(1 - rho) * e1))
+        b.append(0.0002 + 0.02 * (math.sqrt(rho) * f + math.sqrt(1 - rho) * e2))
+    return [a, b]
+
+
 def backtest(returns, var_fn, alpha=0.99, window=250):
     """Rolling one-day-ahead backtest: VaR from the previous `window` returns vs the realised
     return. Returns (exceedances, observations)."""
@@ -132,8 +168,21 @@ def report(returns, alphas=(0.95, 0.99), notional=1_000_000):
     return "\n".join(lines)
 
 
+def portfolio_report(alpha=0.99):
+    series, w = correlated_synthetic(), [0.7, 0.3]
+    var, comps = portfolio_var(series, w, alpha)
+    standalone = sum(w[i] * parametric_var(series[i], alpha) for i in range(2))
+    lines = [f"portfolio {alpha:.0%} VaR, weights {w}: {var:.3%} "
+             f"(undiversified sum {standalone:.3%})"]
+    lines += [f"  asset {i}: component VaR {c:.3%} ({c / var:.0%})" for i, c in enumerate(comps)]
+    return "\n".join(lines)
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv == ["--portfolio"]:
+        print(portfolio_report())
+        return
     returns = [float(x) for x in argv] if argv else synthetic_returns()
     print(report(returns))
     if len(returns) > 250:

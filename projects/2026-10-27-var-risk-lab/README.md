@@ -10,6 +10,7 @@ multi-asset portfolios with a covariance matrix.
 ## Run
     python3 var.py                      # synthetic fat-tailed series
     python3 var.py -0.012 0.004 ...     # your own daily returns
+    python3 var.py --portfolio          # 2-asset VaR with component attribution
     python3 -m unittest
 
 ## Increments
@@ -17,3 +18,4 @@ multi-asset portfolios with a covariance matrix.
 2. Rolling-window backtest + Kupiec proportion-of-failures test (`backtest_report`, printed when >250 returns) (done)
 3. Monte Carlo VaR/CVaR: Gaussian and kurtosis-matched Student-t simulation (done)
 4. Basel traffic-light zones from the binomial CDF, shown for the last 250 days in the backtest report (done)
+5. Multi-asset covariance-matrix portfolio VaR with Euler component attribution (done)

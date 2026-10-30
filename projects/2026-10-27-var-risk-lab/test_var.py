@@ -2,7 +2,8 @@ import math
 import unittest
 from var import (historical_var, historical_cvar, parametric_var, parametric_cvar,
                  synthetic_returns, backtest, kupiec_pof,
-                 monte_carlo_var, excess_kurtosis, traffic_light, binom_cdf)
+                 monte_carlo_var, excess_kurtosis, traffic_light, binom_cdf,
+                 covariance_matrix, portfolio_var, correlated_synthetic)
 
 
 class VarTests(unittest.TestCase):
@@ -48,6 +49,28 @@ class MonteCarloTests(unittest.TestCase):
         self.assertEqual(monte_carlo_var(r, dist="t"), monte_carlo_var(r, dist="t"))
         with self.assertRaises(ValueError):
             monte_carlo_var(r, dist="laplace")
+
+
+class PortfolioTests(unittest.TestCase):
+    def test_single_asset_matches_parametric(self):
+        r = synthetic_returns()
+        v, comps = portfolio_var([r], [1.0], 0.99)
+        self.assertAlmostEqual(v, parametric_var(r, 0.99))
+        self.assertAlmostEqual(comps[0], v)
+
+    def test_components_sum_and_diversification(self):
+        series = correlated_synthetic()
+        w = [0.5, 0.5]
+        v, comps = portfolio_var(series, w, 0.99)
+        self.assertAlmostEqual(sum(comps), v)
+        undiversified = sum(wi * parametric_var(s, 0.99) for wi, s in zip(w, series))
+        self.assertLess(v, undiversified)
+
+    def test_covariance_symmetric_and_validation(self):
+        cov = covariance_matrix(correlated_synthetic())
+        self.assertAlmostEqual(cov[0][1], cov[1][0])
+        with self.assertRaises(ValueError):
+            covariance_matrix([[0.1, 0.2], [0.1]])
 
 
 class BacktestTests(unittest.TestCase):
