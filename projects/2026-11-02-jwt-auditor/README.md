@@ -15,3 +15,4 @@ and CI exit codes, and a verifier-config checklist.
 ## Increments
 1. Decoder + rule-based auditor (alg none/missing, key-URL headers, kid metachars, exp/claims) (done)
 2. Batch `--file` input (comments, `Bearer ` prefix), `--json`, `--fail-on` exit codes, malformed tokens as findings; unit + CLI tests (done)
+3. Verifier-policy mode: `--allow-alg`, `--expect-iss`, `--expect-aud` (string or array aud), plus `nbf` check (done)

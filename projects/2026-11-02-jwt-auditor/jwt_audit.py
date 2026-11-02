@@ -27,7 +27,7 @@ def parse(token):
     return header, payload, parts[2]
 
 
-def audit(header, payload, sig, now=None):
+def audit(header, payload, sig, now=None, policy=None):
     now = time.time() if now is None else now
     out = []
 
@@ -66,17 +66,46 @@ def audit(header, payload, sig, now=None):
     for claim in ("iss", "aud", "sub"):
         if claim not in payload:
             add("low", "CLAIM_MISSING", "no '%s' claim" % claim)
+    nbf = payload.get("nbf")
+    if isinstance(nbf, (int, float)) and not isinstance(nbf, bool) and nbf > now:
+        add("info", "NOT_YET_VALID", "nbf is %ds in the future" % (nbf - now))
+    if policy:
+        out.extend(check_policy(header, payload, policy))
     return sorted(out, key=lambda f: -SEVERITY[f["severity"]])
 
 
-def audit_token(token, now=None):
+def check_policy(header, payload, policy):
+    """Compare a token against what *your* verifier is configured to accept.
+
+    policy keys (all optional): allow_algs (list), iss (str), aud (str).
+    """
+    out = []
+    allowed = policy.get("allow_algs")
+    if allowed and header.get("alg") not in allowed:
+        out.append({"severity": "high", "code": "POLICY_ALG",
+                    "message": "alg %r not in allow-list %s" % (header.get("alg"), sorted(allowed))})
+    iss = policy.get("iss")
+    if iss and payload.get("iss") != iss:
+        out.append({"severity": "high", "code": "POLICY_ISS",
+                    "message": "iss %r != expected %r" % (payload.get("iss"), iss)})
+    aud = policy.get("aud")
+    if aud:
+        got = payload.get("aud")
+        got = got if isinstance(got, list) else [got]  # RFC 7519: string or array
+        if aud not in got:
+            out.append({"severity": "high", "code": "POLICY_AUD",
+                        "message": "aud %r does not include expected %r" % (payload.get("aud"), aud)})
+    return out
+
+
+def audit_token(token, now=None, policy=None):
     """Parse + audit one token string; parse errors become a single high finding."""
     try:
         header, payload, sig = parse(token)
     except ValueError as e:
         return {"header": None, "payload": None,
                 "findings": [{"severity": "high", "code": "MALFORMED", "message": str(e)}]}
-    return {"header": header, "payload": payload, "findings": audit(header, payload, sig, now)}
+    return {"header": header, "payload": payload, "findings": audit(header, payload, sig, now, policy)}
 
 
 def read_tokens(path):
@@ -93,6 +122,10 @@ def main(argv):
     ap.add_argument("token", nargs="?", help="a JWT string")
     ap.add_argument("--file", help="file with one token per line")
     ap.add_argument("--json", action="store_true", help="emit JSON")
+    ap.add_argument("--allow-alg", action="append", metavar="ALG",
+                    help="verifier's accepted algorithms (repeatable); others are flagged")
+    ap.add_argument("--expect-iss", help="issuer your verifier requires")
+    ap.add_argument("--expect-aud", help="audience your verifier requires")
     ap.add_argument("--fail-on", choices=["high", "medium", "low"], default="high",
                     help="exit 1 if any finding at or above this severity (default: high)")
     args = ap.parse_args(argv[1:])
@@ -100,7 +133,8 @@ def main(argv):
         ap.error("give exactly one of <token> or --file")
     tokens = [args.token] if args.token else list(read_tokens(args.file))
 
-    results = [dict(audit_token(t), token=t[:24] + "...") for t in tokens]
+    policy = {"allow_algs": args.allow_alg, "iss": args.expect_iss, "aud": args.expect_aud}
+    results = [dict(audit_token(t, policy=policy), token=t[:24] + "...") for t in tokens]
     threshold = SEVERITY[args.fail_on]
     failed = any(SEVERITY[f["severity"]] >= threshold for r in results for f in r["findings"])
     if args.json:

@@ -63,6 +63,36 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(sev, sorted(sev, reverse=True))
 
 
+class PolicyTests(unittest.TestCase):
+    def pcodes(self, header, payload, policy):
+        r = ja.audit_token(make(header, payload), NOW, policy)
+        return {f["code"] for f in r["findings"]}
+
+    def test_all_policy_checks_pass(self):
+        pol = {"allow_algs": ["RS256"], "iss": "me", "aud": "you"}
+        self.assertEqual(self.pcodes({"alg": "RS256"}, GOOD_PAYLOAD, pol), set())
+
+    def test_policy_violations(self):
+        pol = {"allow_algs": ["ES256"], "iss": "other", "aud": "nobody"}
+        self.assertEqual(self.pcodes({"alg": "RS256"}, GOOD_PAYLOAD, pol),
+                         {"POLICY_ALG", "POLICY_ISS", "POLICY_AUD"})
+
+    def test_aud_array(self):
+        p = dict(GOOD_PAYLOAD, aud=["x", "you"])
+        self.assertEqual(self.pcodes({"alg": "RS256"}, p, {"aud": "you"}), set())
+
+    def test_nbf_future(self):
+        p = dict(GOOD_PAYLOAD, nbf=NOW + 30)
+        self.assertIn("NOT_YET_VALID", self.pcodes({"alg": "RS256"}, p, None))
+
+    def test_cli_policy_flags(self):
+        t = make({"alg": "RS256"}, GOOD_PAYLOAD)
+        out = subprocess.run([sys.executable, os.path.join(HERE, "jwt_audit.py"), t,
+                              "--expect-iss", "evil"], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("POLICY_ISS", out.stdout)
+
+
 class CliTests(unittest.TestCase):
     def run_cli(self, *args):
         return subprocess.run([sys.executable, os.path.join(HERE, "jwt_audit.py"), *args],
