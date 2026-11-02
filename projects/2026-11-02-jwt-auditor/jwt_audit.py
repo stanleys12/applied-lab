@@ -1,5 +1,6 @@
 """jwt-auditor: offline, defensive JWT inspector. Decodes a token (never verifies or forges)
 and reports header/claim weaknesses a reviewer should flag."""
+import argparse
 import base64
 import json
 import sys
@@ -68,21 +69,51 @@ def audit(header, payload, sig, now=None):
     return sorted(out, key=lambda f: -SEVERITY[f["severity"]])
 
 
-def main(argv):
-    if len(argv) != 2:
-        print("usage: jwt_audit.py <token>", file=sys.stderr)
-        return 2
+def audit_token(token, now=None):
+    """Parse + audit one token string; parse errors become a single high finding."""
     try:
-        header, payload, sig = parse(argv[1])
+        header, payload, sig = parse(token)
     except ValueError as e:
-        print("error:", e, file=sys.stderr)
-        return 2
-    print("header: ", json.dumps(header))
-    print("payload:", json.dumps(payload))
-    findings = audit(header, payload, sig)
-    for f in findings:
-        print("[%-6s] %s: %s" % (f["severity"], f["code"], f["message"]))
-    return 1 if any(f["severity"] == "high" for f in findings) else 0
+        return {"header": None, "payload": None,
+                "findings": [{"severity": "high", "code": "MALFORMED", "message": str(e)}]}
+    return {"header": header, "payload": payload, "findings": audit(header, payload, sig, now)}
+
+
+def read_tokens(path):
+    """One token per line; blank lines and '#' comments skipped; 'Bearer ' prefix tolerated."""
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                yield line[7:].strip() if line.lower().startswith("bearer ") else line
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description="Offline JWT auditor (decode only, no verification)")
+    ap.add_argument("token", nargs="?", help="a JWT string")
+    ap.add_argument("--file", help="file with one token per line")
+    ap.add_argument("--json", action="store_true", help="emit JSON")
+    ap.add_argument("--fail-on", choices=["high", "medium", "low"], default="high",
+                    help="exit 1 if any finding at or above this severity (default: high)")
+    args = ap.parse_args(argv[1:])
+    if bool(args.token) == bool(args.file):
+        ap.error("give exactly one of <token> or --file")
+    tokens = [args.token] if args.token else list(read_tokens(args.file))
+
+    results = [dict(audit_token(t), token=t[:24] + "...") for t in tokens]
+    threshold = SEVERITY[args.fail_on]
+    failed = any(SEVERITY[f["severity"]] >= threshold for r in results for f in r["findings"])
+    if args.json:
+        print(json.dumps(results, indent=2))
+    else:
+        for i, r in enumerate(results, 1):
+            print("== token %d (%s)" % (i, r["token"]))
+            if r["header"] is not None:
+                print("header: ", json.dumps(r["header"]))
+                print("payload:", json.dumps(r["payload"]))
+            for f in r["findings"]:
+                print("[%-6s] %s: %s" % (f["severity"], f["code"], f["message"]))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
