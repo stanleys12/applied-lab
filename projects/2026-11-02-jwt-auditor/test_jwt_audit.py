@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 import jwt_audit as ja
@@ -100,7 +101,7 @@ class CliTests(unittest.TestCase):
 
     def test_file_batch_json_and_exit_codes(self):
         bad = make({"alg": "none"}, GOOD_PAYLOAD, "")
-        ok = make({"alg": "RS256"}, dict(GOOD_PAYLOAD, iat=3_999_999_000, exp=4_000_000_000))
+        ok = make({"alg": "RS256"}, dict(GOOD_PAYLOAD, iat=int(time.time()) - 60, exp=int(time.time()) + 600))
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
             fh.write("# comment\n\nBearer %s\n%s\n" % (bad, ok))
         try:
@@ -117,6 +118,26 @@ class CliTests(unittest.TestCase):
         t = make({"alg": "RS256"}, {"iss": "a", "aud": "b", "sub": "c"})  # no exp -> medium
         self.assertEqual(self.run_cli(t).returncode, 0)
         self.assertEqual(self.run_cli(t, "--fail-on", "medium").returncode, 1)
+
+
+class ExtraChecksTests(unittest.TestCase):
+    def test_iat_future_crit_typ(self):
+        p = dict(GOOD_PAYLOAD, iat=NOW + 3600, exp=NOW + 7200)
+        c = codes(make({"alg": "RS256", "crit": ["b64"], "typ": "weird"}, p))
+        self.assertTrue({"IAT_FUTURE", "HEADER_CRIT", "TYP_UNUSUAL"} <= c)
+
+    def test_small_iat_skew_tolerated(self):
+        p = dict(GOOD_PAYLOAD, iat=NOW + 30)
+        self.assertNotIn("IAT_FUTURE", codes(make({"alg": "RS256"}, p)))
+
+    def test_max_lifetime_policy(self):
+        tok = make({"alg": "RS256"}, GOOD_PAYLOAD)  # lifetime 660s
+        f = lambda pol: {x["code"] for x in ja.audit_token(tok, NOW, pol)["findings"]}
+        self.assertIn("POLICY_LIFETIME", f({"max_lifetime": 300}))
+        self.assertNotIn("POLICY_LIFETIME", f({"max_lifetime": 3600}))
+        noiat = make({"alg": "RS256"}, {k: v for k, v in GOOD_PAYLOAD.items() if k != "iat"})
+        g = {x["code"] for x in ja.audit_token(noiat, NOW, {"max_lifetime": 300})["findings"]}
+        self.assertIn("POLICY_LIFETIME_UNKNOWN", g)
 
 
 if __name__ == "__main__":

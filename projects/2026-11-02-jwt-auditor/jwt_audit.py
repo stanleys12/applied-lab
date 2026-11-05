@@ -69,6 +69,15 @@ def audit(header, payload, sig, now=None, policy=None):
     nbf = payload.get("nbf")
     if isinstance(nbf, (int, float)) and not isinstance(nbf, bool) and nbf > now:
         add("info", "NOT_YET_VALID", "nbf is %ds in the future" % (nbf - now))
+    iat = payload.get("iat")
+    if isinstance(iat, (int, float)) and not isinstance(iat, bool) and iat > now + 300:
+        add("medium", "IAT_FUTURE", "iat is %ds in the future (clock skew or forged claim)" % (iat - now))
+    if "crit" in header:
+        add("medium", "HEADER_CRIT", "header 'crit' lists extensions %r; verifiers must reject "
+            "tokens with critical extensions they do not understand" % (header["crit"],))
+    typ = header.get("typ")
+    if typ is not None and str(typ).upper() not in ("JWT", "AT+JWT", "JOSE"):
+        add("low", "TYP_UNUSUAL", "unusual typ %r" % (typ,))
     if policy:
         out.extend(check_policy(header, payload, policy))
     return sorted(out, key=lambda f: -SEVERITY[f["severity"]])
@@ -77,7 +86,7 @@ def audit(header, payload, sig, now=None, policy=None):
 def check_policy(header, payload, policy):
     """Compare a token against what *your* verifier is configured to accept.
 
-    policy keys (all optional): allow_algs (list), iss (str), aud (str).
+    policy keys (all optional): allow_algs (list), iss (str), aud (str), max_lifetime (seconds).
     """
     out = []
     allowed = policy.get("allow_algs")
@@ -95,6 +104,15 @@ def check_policy(header, payload, policy):
         if aud not in got:
             out.append({"severity": "high", "code": "POLICY_AUD",
                         "message": "aud %r does not include expected %r" % (payload.get("aud"), aud)})
+    max_life = policy.get("max_lifetime")
+    exp, iat = payload.get("exp"), payload.get("iat")
+    if max_life and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (exp, iat)):
+        if exp - iat > max_life:
+            out.append({"severity": "medium", "code": "POLICY_LIFETIME",
+                        "message": "lifetime %ds exceeds policy maximum %ds" % (exp - iat, max_life)})
+    elif max_life:
+        out.append({"severity": "low", "code": "POLICY_LIFETIME_UNKNOWN",
+                    "message": "cannot check max lifetime: exp and iat must both be numeric"})
     return out
 
 
@@ -126,6 +144,8 @@ def main(argv):
                     help="verifier's accepted algorithms (repeatable); others are flagged")
     ap.add_argument("--expect-iss", help="issuer your verifier requires")
     ap.add_argument("--expect-aud", help="audience your verifier requires")
+    ap.add_argument("--max-lifetime", type=int, metavar="SECONDS",
+                    help="flag tokens whose exp-iat exceeds this many seconds")
     ap.add_argument("--fail-on", choices=["high", "medium", "low"], default="high",
                     help="exit 1 if any finding at or above this severity (default: high)")
     args = ap.parse_args(argv[1:])
@@ -133,7 +153,8 @@ def main(argv):
         ap.error("give exactly one of <token> or --file")
     tokens = [args.token] if args.token else list(read_tokens(args.file))
 
-    policy = {"allow_algs": args.allow_alg, "iss": args.expect_iss, "aud": args.expect_aud}
+    policy = {"allow_algs": args.allow_alg, "iss": args.expect_iss, "aud": args.expect_aud,
+              "max_lifetime": args.max_lifetime}
     results = [dict(audit_token(t, policy=policy), token=t[:24] + "...") for t in tokens]
     threshold = SEVERITY[args.fail_on]
     failed = any(SEVERITY[f["severity"]] >= threshold for r in results for f in r["findings"])
