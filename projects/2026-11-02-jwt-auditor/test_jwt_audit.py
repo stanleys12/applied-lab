@@ -140,5 +140,29 @@ class ExtraChecksTests(unittest.TestCase):
         self.assertIn("POLICY_LIFETIME_UNKNOWN", g)
 
 
+class BatchTests(unittest.TestCase):
+    def test_duplicate_jti_flagged_on_both(self):
+        a = ja.audit_token(make({"alg": "RS256"}, dict(GOOD_PAYLOAD, jti="x1")), NOW)
+        b = ja.audit_token(make({"alg": "RS256"}, dict(GOOD_PAYLOAD, jti="x1")), NOW)
+        c = ja.audit_token(make({"alg": "RS256"}, dict(GOOD_PAYLOAD, jti="x2")), NOW)
+        ja.batch_checks([a, b, c])
+        self.assertEqual([r["findings"] != [] for r in (a, b, c)], [True, True, False])
+        self.assertIn("tokens 1, 2", a["findings"][0]["message"])
+
+    def test_malformed_has_no_payload_and_summary_counts(self):
+        bad = ja.audit_token("nope", NOW)
+        none_tok = ja.audit_token(make({"alg": "none"}, GOOD_PAYLOAD, ""), NOW)
+        s = ja.summarize(ja.batch_checks([bad, none_tok]))
+        self.assertEqual(s["tokens"], 2)
+        self.assertEqual(s["by_code"]["MALFORMED"], 1)
+        self.assertGreaterEqual(s["by_severity"]["high"], 2)
+
+    def test_cli_summary_flag(self):
+        p = subprocess.run([sys.executable, os.path.join(HERE, "jwt_audit.py"), "garbage",
+                            "--summary", "--json"], capture_output=True, text=True)
+        data = json.loads(p.stdout)
+        self.assertEqual(data["summary"]["by_code"], {"MALFORMED": 1})
+
+
 if __name__ == "__main__":
     unittest.main()

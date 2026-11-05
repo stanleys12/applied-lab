@@ -126,6 +126,34 @@ def audit_token(token, now=None, policy=None):
     return {"header": header, "payload": payload, "findings": audit(header, payload, sig, now, policy)}
 
 
+def batch_checks(results):
+    """Cross-token checks: a repeated jti means replayed/duplicated tokens."""
+    seen = {}
+    for i, r in enumerate(results):
+        jti = (r["payload"] or {}).get("jti")
+        if isinstance(jti, (str, int)) and not isinstance(jti, bool):
+            seen.setdefault(jti, []).append(i)
+    for jti, idxs in seen.items():
+        if len(idxs) > 1:
+            for i in idxs:
+                results[i]["findings"].append({
+                    "severity": "medium", "code": "JTI_DUPLICATE",
+                    "message": "jti %r appears in %d tokens in this batch (tokens %s)"
+                               % (jti, len(idxs), ", ".join(str(n + 1) for n in idxs))})
+    return results
+
+
+def summarize(results):
+    """Counts of findings per severity and per code across a batch."""
+    by_sev, by_code = {}, {}
+    for r in results:
+        for f in r["findings"]:
+            by_sev[f["severity"]] = by_sev.get(f["severity"], 0) + 1
+            by_code[f["code"]] = by_code.get(f["code"], 0) + 1
+    return {"tokens": len(results), "by_severity": by_sev,
+            "by_code": dict(sorted(by_code.items(), key=lambda kv: (-kv[1], kv[0])))}
+
+
 def read_tokens(path):
     """One token per line; blank lines and '#' comments skipped; 'Bearer ' prefix tolerated."""
     with open(path) as fh:
@@ -144,6 +172,8 @@ def main(argv):
                     help="verifier's accepted algorithms (repeatable); others are flagged")
     ap.add_argument("--expect-iss", help="issuer your verifier requires")
     ap.add_argument("--expect-aud", help="audience your verifier requires")
+    ap.add_argument("--summary", action="store_true",
+                    help="append a per-severity / per-code rollup (JSON: wraps output in an object)")
     ap.add_argument("--max-lifetime", type=int, metavar="SECONDS",
                     help="flag tokens whose exp-iat exceeds this many seconds")
     ap.add_argument("--fail-on", choices=["high", "medium", "low"], default="high",
@@ -156,10 +186,13 @@ def main(argv):
     policy = {"allow_algs": args.allow_alg, "iss": args.expect_iss, "aud": args.expect_aud,
               "max_lifetime": args.max_lifetime}
     results = [dict(audit_token(t, policy=policy), token=t[:24] + "...") for t in tokens]
+    batch_checks(results)
+    summary = summarize(results)
     threshold = SEVERITY[args.fail_on]
     failed = any(SEVERITY[f["severity"]] >= threshold for r in results for f in r["findings"])
     if args.json:
-        print(json.dumps(results, indent=2))
+        print(json.dumps({"results": results, "summary": summary} if args.summary else results,
+                         indent=2))
     else:
         for i, r in enumerate(results, 1):
             print("== token %d (%s)" % (i, r["token"]))
@@ -168,6 +201,13 @@ def main(argv):
                 print("payload:", json.dumps(r["payload"]))
             for f in r["findings"]:
                 print("[%-6s] %s: %s" % (f["severity"], f["code"], f["message"]))
+    if args.summary and not args.json:
+        print("== summary: %d token(s)" % summary["tokens"])
+        for sev in ("high", "medium", "low", "info"):
+            if sev in summary["by_severity"]:
+                print("  %-6s %d" % (sev, summary["by_severity"][sev]))
+        for code, n in summary["by_code"].items():
+            print("  %3d x %s" % (n, code))
     return 1 if failed else 0
 
 

@@ -17,3 +17,4 @@ and CI exit codes, and a verifier-config checklist.
 2. Batch `--file` input (comments, `Bearer ` prefix), `--json`, `--fail-on` exit codes, malformed tokens as findings; unit + CLI tests (done)
 3. Verifier-policy mode: `--allow-alg`, `--expect-iss`, `--expect-aud` (string or array aud), plus `nbf` check (done)
 4. `--max-lifetime` policy plus `iat`-in-future, `crit` header, and unusual `typ` checks (done)
+5. Batch analysis: duplicate-`jti` detection across tokens and `--summary` rollup by severity/code (done)
