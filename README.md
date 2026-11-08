@@ -28,4 +28,4 @@ Everything runs on `python3` (stdlib) or `node`, no installs.
 | 2026-10-21 | ai-ml | [bm25-search-lab](projects/2026-10-21-bm25-search-lab) | done | 5/5 |
 | 2026-10-27 | fintech | [var-risk-lab](projects/2026-10-27-var-risk-lab) | done | 5/5 |
 | 2026-11-02 | security | [jwt-auditor](projects/2026-11-02-jwt-auditor) | done | 5/5 |
-| 2026-11-05 | ai-ml | [ngram-lm-lab](projects/2026-11-05-ngram-lm-lab) | wip | 1/5 |
+| 2026-11-05 | ai-ml | [ngram-lm-lab](projects/2026-11-05-ngram-lm-lab) | wip | 2/5 |

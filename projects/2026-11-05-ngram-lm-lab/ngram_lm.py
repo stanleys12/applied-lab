@@ -66,6 +66,55 @@ class NGramLM:
         return "".join(out)
 
 
+class InterpolatedLM(NGramLM):
+    """Jelinek-Mercer interpolation: P = sum_j lam_j * P_ML(ch | last j chars), j=0..n-1.
+
+    Order 0 is a uniform floor (add-k unigram) so unseen characters never get zero mass.
+    lambdas: n weights for orders n-1..0 (default: geometric, favouring longer contexts).
+    """
+
+    def __init__(self, n=3, k=0.1, lambdas=None):
+        super().__init__(n, k)
+        if lambdas is None:
+            w = [2.0 ** j for j in range(n)]      # longest context gets the biggest weight
+            lambdas = [x / sum(w) for x in reversed(w)][::-1]
+        if len(lambdas) != n or abs(sum(lambdas) - 1) > 1e-9 or min(lambdas) < 0:
+            raise ValueError("need %d non-negative lambdas summing to 1" % n)
+        self.lambdas = lambdas  # lambdas[j] weights the context of length j
+
+    def prob(self, ctx, ch):
+        ctx = tuple(ctx)
+        v = len(self.vocab) + 1
+        p = 0.0
+        for j, lam in enumerate(self.lambdas):
+            sub = ctx[len(ctx) - j:] if j else ()
+            c = self.counts_for(sub)
+            total = sum(c.values()) if c else 0
+            if j == 0:
+                p += lam * ((c[ch] if c else 0) + self.k) / (total + self.k * v)
+            elif total:
+                p += lam * c[ch] / total
+            else:  # unseen context: hand its weight to the order-0 floor
+                p += lam * self._floor(ch, v)
+        return p
+
+    def _floor(self, ch, v):
+        c = self.counts_for(())
+        return ((c[ch] if c else 0) + self.k) / (sum(c.values()) + self.k * v)
+
+    def counts_for(self, sub):
+        """Counts of next char after a context of any length <= n-1 (marginalised lazily, cached)."""
+        cache = self.__dict__.setdefault("_cache", {})
+        if sub not in cache:
+            agg = Counter()
+            m = self.n - 1 - len(sub)
+            for full, c in self.counts.items():
+                if full[len(full) - len(sub):] == sub if sub else True:
+                    agg.update(c)
+            cache[sub] = agg
+        return cache[sub]
+
+
 CORPUS = [
     "the quick brown fox jumps over the lazy dog",
     "a journey of a thousand miles begins with a single step",
@@ -89,6 +138,10 @@ if __name__ == "__main__":
     print("held-out perplexity by order (add-k=0.1):")
     for n in range(1, 6):
         lm = NGramLM(n).train(train)
+        print("  n=%d  ppl=%.2f" % (n, lm.perplexity(test)))
+    print("held-out perplexity, interpolated (default lambdas):")
+    for n in range(1, 6):
+        lm = InterpolatedLM(n).train(train)
         print("  n=%d  ppl=%.2f" % (n, lm.perplexity(test)))
     lm = NGramLM(3).train(CORPUS)
     rng = random.Random(7)

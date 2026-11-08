@@ -12,3 +12,4 @@ Count-based LM -> smoothing comparison -> backoff/interpolation -> evaluation ha
 
 ## Increments
 1. N-gram counts, add-k smoothing, perplexity, sampling, demo over a tiny corpus (done)
+2. Jelinek-Mercer interpolated LM (`InterpolatedLM`): mixes all context orders, stable at high n (n=5 ppl 12.9 vs 24.2 add-k) (done)
