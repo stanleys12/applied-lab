@@ -82,21 +82,59 @@ class InterpolatedLM(NGramLM):
             raise ValueError("need %d non-negative lambdas summing to 1" % n)
         self.lambdas = lambdas  # lambdas[j] weights the context of length j
 
-    def prob(self, ctx, ch):
+    def train(self, texts):
+        self.__dict__.pop("_cache", None)  # marginalised counts are stale after new data
+        return super().train(texts)
+
+    def components(self, ctx, ch):
+        """Per-order probabilities [P_0, ..., P_{n-1}] that get mixed by the lambdas."""
         ctx = tuple(ctx)
         v = len(self.vocab) + 1
-        p = 0.0
-        for j, lam in enumerate(self.lambdas):
+        out = []
+        for j in range(self.n):
             sub = ctx[len(ctx) - j:] if j else ()
             c = self.counts_for(sub)
             total = sum(c.values()) if c else 0
             if j == 0:
-                p += lam * ((c[ch] if c else 0) + self.k) / (total + self.k * v)
+                out.append(((c[ch] if c else 0) + self.k) / (total + self.k * v))
             elif total:
-                p += lam * c[ch] / total
+                out.append(c[ch] / total)
             else:  # unseen context: hand its weight to the order-0 floor
-                p += lam * self._floor(ch, v)
-        return p
+                out.append(self._floor(ch, v))
+        return out
+
+    def prob(self, ctx, ch):
+        return sum(l * p for l, p in zip(self.lambdas, self.components(ctx, ch)))
+
+    def fit_lambdas(self, heldout, iters=50, tol=1e-6):
+        """Learn mixing weights by EM on held-out text (deleted-interpolation style).
+
+        E-step: responsibility of order j for each held-out char = lam_j*P_j / sum.
+        M-step: new lam_j = mean responsibility. Never decreases held-out likelihood.
+        Returns the list of held-out log-likelihoods per iteration.
+        """
+        events = []
+        for t in heldout:
+            seq = self._padded(t)
+            for i in range(self.n - 1, len(seq)):
+                events.append(self.components(seq[i - self.n + 1:i], seq[i]))
+        if not events:
+            raise ValueError("no held-out events")
+        lam, history = list(self.lambdas), []
+        for _ in range(iters):
+            acc, ll = [0.0] * self.n, 0.0
+            for comps in events:
+                mix = [l * p for l, p in zip(lam, comps)]
+                z = sum(mix)
+                ll += math.log(z)
+                for j, m in enumerate(mix):
+                    acc[j] += m / z
+            lam = [a / len(events) for a in acc]
+            history.append(ll)
+            if len(history) > 1 and abs(history[-1] - history[-2]) < tol:
+                break
+        self.lambdas = lam
+        return history
 
     def _floor(self, ch, v):
         c = self.counts_for(())
@@ -143,6 +181,14 @@ if __name__ == "__main__":
     for n in range(1, 6):
         lm = InterpolatedLM(n).train(train)
         print("  n=%d  ppl=%.2f" % (n, lm.perplexity(test)))
+    print("held-out perplexity, interpolated + EM-fitted lambdas (fit on a dev split):")
+    dev, test2 = test[:2], test[2:]
+    for n in range(1, 6):
+        lm = InterpolatedLM(n).train(train)
+        before = lm.perplexity(test2)
+        hist = lm.fit_lambdas(dev)
+        print("  n=%d  ppl=%.2f -> %.2f  (%d EM iters, lambdas=%s)" % (
+            n, before, lm.perplexity(test2), len(hist), [round(x, 2) for x in lm.lambdas]))
     lm = NGramLM(3).train(CORPUS)
     rng = random.Random(7)
     print("samples (n=3):")
