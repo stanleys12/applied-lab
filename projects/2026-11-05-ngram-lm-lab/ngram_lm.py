@@ -153,6 +153,50 @@ class InterpolatedLM(NGramLM):
         return cache[sub]
 
 
+class KneserNeyLM(NGramLM):
+    """Interpolated Kneser-Ney with absolute discount d.
+
+    Highest order uses raw counts; lower orders use *continuation* counts (how many distinct
+    left-neighbours a char-in-context was seen with), so a char that only ever follows one
+    context gets little backoff mass. Bottoms out at a uniform distribution over vocab+<unk>.
+    """
+
+    def __init__(self, n=3, d=0.75):
+        super().__init__(n, k=0)
+        if not 0 < d < 1:
+            raise ValueError("discount d must be in (0, 1)")
+        self.d = d
+        self._tables = None
+
+    def train(self, texts):
+        self._tables = None
+        return super().train(texts)
+
+    def _build(self):
+        tables = {self.n - 1: self.counts}
+        for L in range(self.n - 2, -1, -1):
+            lower = defaultdict(Counter)
+            for ctx, c in tables[L + 1].items():
+                for ch in c:  # each distinct (w, ctx[1:], ch) contributes one continuation
+                    lower[ctx[1:]][ch] += 1
+            tables[L] = lower
+        self._tables = tables
+
+    def prob(self, ctx, ch):
+        if self._tables is None:
+            self._build()
+        ctx = tuple(ctx)
+        p = 1.0 / (len(self.vocab) + 1)
+        for L in range(0, self.n):  # climb from the uniform base to the full-length context
+            sub = ctx[len(ctx) - L:] if L else ()
+            c = self._tables[L].get(sub)
+            if not c:
+                continue  # unseen context: pass the lower-order estimate through
+            total = sum(c.values())
+            p = max(c[ch] - self.d, 0) / total + self.d * len(c) / total * p
+        return p
+
+
 CORPUS = [
     "the quick brown fox jumps over the lazy dog",
     "a journey of a thousand miles begins with a single step",
@@ -189,6 +233,9 @@ if __name__ == "__main__":
         hist = lm.fit_lambdas(dev)
         print("  n=%d  ppl=%.2f -> %.2f  (%d EM iters, lambdas=%s)" % (
             n, before, lm.perplexity(test2), len(hist), [round(x, 2) for x in lm.lambdas]))
+    print("held-out perplexity, Kneser-Ney (d=0.75):")
+    for n in range(1, 6):
+        print("  n=%d  ppl=%.2f" % (n, KneserNeyLM(n).train(train).perplexity(test)))
     lm = NGramLM(3).train(CORPUS)
     rng = random.Random(7)
     print("samples (n=3):")
