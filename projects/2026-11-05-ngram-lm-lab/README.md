@@ -15,3 +15,8 @@ Count-based LM -> smoothing comparison -> backoff/interpolation -> evaluation ha
 2. Jelinek-Mercer interpolated LM (`InterpolatedLM`): mixes all context orders, stable at high n (n=5 ppl 12.9 vs 24.2 add-k) (done)
 3. `InterpolatedLM.fit_lambdas`: EM-fitted mixing weights on a dev split (n=4 test ppl 12.3 -> 10.3); `components()` refactor, cache invalidated on retrain (done)
 4. `KneserNeyLM`: interpolated Kneser-Ney (absolute discount, continuation counts); distributions sum to 1 over vocab+unk; best result n=2 ppl 10.55 vs add-k 11.73 (done)
+5. `cli.py`: `eval` (k-fold CV table of add-k / interp / interp+EM / Kneser-Ney, mean±stdev) and `sample` subcommands; reads a file or stdin. On the built-in corpus KN n=4 wins (ppl 12.69 vs add-k 20.00) (done)
+
+## CLI
+    python3 cli.py eval [file|-] --max-n 4 --folds 3
+    python3 cli.py sample [file|-] -n 3 --count 5 --seed 1
