@@ -9,7 +9,9 @@ Synthetic GBM prices + SMA-crossover -> position sizing & costs -> walk-forward 
 sweep that demonstrates overfitting -> bootstrap confidence intervals on Sharpe -> CLI report.
 
 ## Run
-    python3 backtest.py
+    python3 backtest.py   # baseline report
+    python3 sweep.py      # overfitting demo
 
 ## Increments
 1. GBM generator, SMA crossover, look-ahead-safe backtest loop with bps costs, metrics (return, CAGR, vol, Sharpe, max drawdown) (done)
+2. `sweep.py`: SMA grid search + train/test split; on driftless GBM the best in-sample Sharpe (~0.77) collapses out-of-sample (~-0.10) (done)
