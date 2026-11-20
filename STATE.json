@@ -1,8 +1,8 @@
 {
   "active": {
-    "dir": "projects/2026-11-14-backtest-engine",
-    "theme": "fintech",
-    "increments_done": 5,
+    "dir": "projects/2026-11-20-secret-scanner",
+    "theme": "security",
+    "increments_done": 1,
     "increments_target": 5
   },
   "theme_rotation": [
@@ -10,6 +10,6 @@
     "ai-ml",
     "fintech"
   ],
-  "next_theme_index": 0,
+  "next_theme_index": 1,
   "completed_count": 12
 }
