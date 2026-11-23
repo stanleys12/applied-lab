@@ -30,4 +30,4 @@ Everything runs on `python3` (stdlib) or `node`, no installs.
 | 2026-11-02 | security | [jwt-auditor](projects/2026-11-02-jwt-auditor) | done | 5/5 |
 | 2026-11-05 | ai-ml | [ngram-lm-lab](projects/2026-11-05-ngram-lm-lab) | done | 5/5 |
 | 2026-11-14 | fintech | [backtest-engine](projects/2026-11-14-backtest-engine) | done | 5/5 |
-| 2026-11-20 | security | [secret-scanner](projects/2026-11-20-secret-scanner) | wip | 1/5 |
+| 2026-11-20 | security | [secret-scanner](projects/2026-11-20-secret-scanner) | wip | 2/5 |

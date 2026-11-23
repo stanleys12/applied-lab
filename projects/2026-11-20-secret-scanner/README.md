@@ -12,3 +12,4 @@ lines) -> baseline file for known findings -> JSON output & precision/recall tes
 
 ## Increments
 1. Rule regexes + entropy-on-assignment detector, redacted output, tree walker (done)
+2. Suppression: inline `# scanner:ignore[=rule,...]` and a `.secretignore` path-glob allowlist; unit tests (`python3 tests/test_ignore.py`) (done)
