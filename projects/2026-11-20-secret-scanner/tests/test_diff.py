@@ -51,8 +51,9 @@ class DiffTests(unittest.TestCase):
 
     def test_removed_secrets_are_not_reported(self):
         found = list(scanner.scan_diff(DIFF, ["fixtures"]))
-        self.assertEqual([(p, n, r) for p, n, r, _ in found], [("app.py", 4, "aws-access-key-id")])
-        self.assertNotIn(FAKE_KEY, found[0][3])
+        self.assertEqual([(f.path, f.line, f.rule) for f in found],
+                         [("app.py", 4, "aws-access-key-id")])
+        self.assertNotIn(FAKE_KEY, found[0].redacted)
 
     def test_unquote_path(self):
         self.assertEqual(gitdiff.unquote_path("b/my file.py\t"), "b/my file.py")

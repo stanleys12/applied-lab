@@ -16,9 +16,14 @@ import math
 import os
 import re
 import sys
-from collections import Counter
+from collections import Counter, namedtuple
 
+import baseline
 import gitdiff
+
+# `path` is what we print; `rel_path` is root-relative with "/" separators, so
+# tree and diff scans fingerprint the same secret identically.
+Finding = namedtuple("Finding", "path line rule redacted rel_path fingerprint")
 
 RULES = [
     ("aws-access-key-id", re.compile(r"\b(AKIA|ASIA)[0-9A-Z]{16}\b")),
@@ -73,6 +78,12 @@ def path_allowed(path, patterns):
 
 def scan_line(line, entropy_threshold=3.5):
     """Yield (rule, redacted_match) for one line, honouring inline ignores."""
+    for rule, raw in _match_line(line, entropy_threshold):
+        yield rule, redact(raw)
+
+
+def _match_line(line, entropy_threshold=3.5):
+    """Like scan_line but yields raw matches; never print or store these."""
     skip = ignored_rules(line)
     if skip is not None and not skip:
         return  # blanket ignore
@@ -81,20 +92,20 @@ def scan_line(line, entropy_threshold=3.5):
         if name in skip:
             continue
         for m in rx.finditer(line):
-            yield name, redact(m.group(0))
+            yield name, m.group(0)
     if "high-entropy-assignment" in skip:
         return
     for m in ASSIGN.finditer(line):
         val = m.group(2)
         if shannon(val) >= entropy_threshold and not PLACEHOLDER.search(val):
-            yield "high-entropy-assignment", redact(val)
+            yield "high-entropy-assignment", val
 
 
-def scan_text(text, entropy_threshold=3.5):
-    """Yield (line_no, rule, redacted_match) for every finding in `text`."""
-    for no, line in enumerate(text.splitlines(), 1):
-        for rule, red in scan_line(line, entropy_threshold):
-            yield no, rule, red
+def line_findings(path, rel_path, no, line):
+    rel_path = rel_path.replace(os.sep, "/")
+    for rule, raw in _match_line(line):
+        yield Finding(path, no, rule, redact(raw), rel_path,
+                      baseline.fingerprint(rel_path, rule, raw))
 
 
 def scan_path(root, allow=()):
@@ -102,24 +113,24 @@ def scan_path(root, allow=()):
         dirs[:] = [d for d in dirs if d not in {".git", "__pycache__", "node_modules"}]
         for f in sorted(files):
             path = os.path.join(dirpath, f)
-            if f == ".secretignore" or path_allowed(os.path.relpath(path, root), allow):
+            rel = os.path.relpath(path, root)
+            if f == ".secretignore" or path_allowed(rel, allow):
                 continue
             try:
                 with open(path, encoding="utf-8") as fh:
                     text = fh.read()
             except (UnicodeDecodeError, OSError):
                 continue  # binary / unreadable
-            for no, rule, red in scan_text(text):
-                yield path, no, rule, red
+            for no, line in enumerate(text.splitlines(), 1):
+                yield from line_findings(path, rel, no, line)
 
 
 def scan_diff(diff_text, allow=()):
-    """Yield (path, line_no, rule, redacted_match) for lines added by a unified diff."""
+    """Yield a Finding for each secret on a line added by a unified diff."""
     for path, no, line in gitdiff.added_lines(diff_text):
         if os.path.basename(path) == ".secretignore" or path_allowed(path, allow):
             continue
-        for rule, red in scan_line(line):
-            yield path, no, rule, red
+        yield from line_findings(path, path, no, line)
 
 
 def main(argv=None):
@@ -129,13 +140,22 @@ def main(argv=None):
     mode.add_argument("--staged", action="store_true", help="scan lines added in the git index")
     mode.add_argument("--since", metavar="REV", help="scan lines added since REV (tracked files)")
     mode.add_argument("--diff", metavar="FILE", help="scan a unified diff file ('-' = stdin)")
+    base = ap.add_mutually_exclusive_group()
+    base.add_argument("--baseline", metavar="FILE", help="suppress findings recorded in FILE")
+    base.add_argument("--write-baseline", metavar="FILE",
+                      help="record all current findings to FILE (tree scan only)")
     args = ap.parse_args(argv)
+    diff_mode = args.staged or args.since is not None or args.diff is not None
+    if args.write_baseline is not None and diff_mode:
+        ap.error("--write-baseline needs a full tree scan, not a diff mode")
 
     if not os.path.isdir(args.root):
         ap.error("not a directory: %s" % args.root)  # never report a typo as "clean"
     allow = load_ignore_file(os.path.join(args.root, ".secretignore"))
 
     try:
+        # Load first: a missing or corrupt baseline must fail loudly (exit 2).
+        known = None if args.baseline is None else baseline.load(args.baseline)
         if args.diff == "-":
             findings = scan_diff(sys.stdin.buffer.read().decode("utf-8", "replace"), allow)
         elif args.diff is not None:
@@ -145,16 +165,27 @@ def main(argv=None):
             findings = scan_diff(gitdiff.git_diff(args.root, args.staged, args.since), allow)
         else:
             findings = scan_path(args.root, allow)
-    except (OSError, RuntimeError) as exc:
+        findings = list(findings)
+        if args.write_baseline is not None:
+            refused = baseline.write(args.write_baseline, findings)
+            print("baselined %d finding(s)" % (len(findings) - refused))
+            if refused:
+                print("%d finding(s) cannot be baselined; they will keep failing scans" % refused)
+            return 1 if refused else 0
+    except (OSError, RuntimeError, ValueError) as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 2
 
-    n = 0
-    for path, no, rule, red in findings:
-        print("%s:%d  [%s]  %s" % (path, no, rule, red))
-        n += 1
-    print("%d finding(s)" % n)
-    return 1 if n else 0
+    summary = ""
+    if known is not None:
+        findings, suppressed, unused = baseline.apply(findings, known)
+        summary = ", %d suppressed by baseline" % suppressed
+        if unused and not diff_mode:  # a diff only sees part of the tree
+            summary += ", %d stale baseline match(es): consider rewriting it" % unused
+    for f in findings:
+        print("%s:%d  [%s]  %s" % (f.path, f.line, f.rule, f.redacted))
+    print("%d finding(s)%s" % (len(findings), summary))
+    return 1 if findings else 0
 
 
 if __name__ == "__main__":
