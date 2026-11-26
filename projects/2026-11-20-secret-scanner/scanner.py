@@ -6,14 +6,19 @@ Two detectors:
 Suppression:
   * inline  - `# scanner:ignore` or `# scanner:ignore=rule1,rule2` on the offending line
   * paths   - glob patterns in `<root>/.secretignore`
+Modes: scan a whole tree, or only the lines a git diff adds (pre-commit style).
 Findings are always printed *redacted* so the scanner itself never re-leaks a secret.
+Exit status: 0 clean, 1 findings, 2 usage or git error.
 """
+import argparse
 import fnmatch
 import math
 import os
 import re
 import sys
 from collections import Counter
+
+import gitdiff
 
 RULES = [
     ("aws-access-key-id", re.compile(r"\b(AKIA|ASIA)[0-9A-Z]{16}\b")),
@@ -108,12 +113,49 @@ def scan_path(root, allow=()):
                 yield path, no, rule, red
 
 
-if __name__ == "__main__":
-    root = sys.argv[1] if len(sys.argv) > 1 else "samples"
+def scan_diff(diff_text, allow=()):
+    """Yield (path, line_no, rule, redacted_match) for lines added by a unified diff."""
+    for path, no, line in gitdiff.added_lines(diff_text):
+        if os.path.basename(path) == ".secretignore" or path_allowed(path, allow):
+            continue
+        for rule, red in scan_line(line):
+            yield path, no, rule, red
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Scan for accidentally committed secrets.")
+    ap.add_argument("root", nargs="?", default="samples", help="directory to scan")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--staged", action="store_true", help="scan lines added in the git index")
+    mode.add_argument("--since", metavar="REV", help="scan lines added since REV (tracked files)")
+    mode.add_argument("--diff", metavar="FILE", help="scan a unified diff file ('-' = stdin)")
+    args = ap.parse_args(argv)
+
+    if not os.path.isdir(args.root):
+        ap.error("not a directory: %s" % args.root)  # never report a typo as "clean"
+    allow = load_ignore_file(os.path.join(args.root, ".secretignore"))
+
+    try:
+        if args.diff == "-":
+            findings = scan_diff(sys.stdin.buffer.read().decode("utf-8", "replace"), allow)
+        elif args.diff is not None:
+            with open(args.diff, "rb") as fh:
+                findings = scan_diff(fh.read().decode("utf-8", "replace"), allow)
+        elif args.staged or args.since is not None:
+            findings = scan_diff(gitdiff.git_diff(args.root, args.staged, args.since), allow)
+        else:
+            findings = scan_path(args.root, allow)
+    except (OSError, RuntimeError) as exc:
+        print("error: %s" % exc, file=sys.stderr)
+        return 2
+
     n = 0
-    allow = load_ignore_file(os.path.join(root, ".secretignore"))
-    for path, no, rule, red in scan_path(root, allow):
+    for path, no, rule, red in findings:
         print("%s:%d  [%s]  %s" % (path, no, rule, red))
         n += 1
     print("%d finding(s)" % n)
-    sys.exit(1 if n else 0)
+    return 1 if n else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
